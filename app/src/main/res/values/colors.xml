@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="bg_dark">#09090B</color>
+    <color name="emerald_500">#10B981</color>
+    <color name="emerald_600">#059669</color>
+    <color name="emerald_dark">#022C22</color>
+    <color name="zinc_900">#18181B</color>
+    <color name="zinc_800">#27272A</color>
+</resources>

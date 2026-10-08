@@ -1,0 +1,67 @@
+name: Build AcNotes APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Prepare APK for Release
+        run: |
+          mkdir -p release-output
+          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v1.0.0.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AcNotes-APK
+          path: release-output/AcNotes-v1.0.0.apk
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main')
+        with:
+          tag_name: v1.0.0
+          name: "AcNotes v1.0.0 - Android APK"
+          body: |
+            ### 📱 AcNotes v1.0.0
+            
+            - تطبيق ملاحظات أندرويد متكامل وفائق الخفة.
+            - يدعم العمل بدون إنترنت (Offline-First) بشكل كامل مع IndexedDB.
+            - مزامنة سحابية تلقائية مع Cloudflare R2 عند توفر الاتصال.
+            - دعم احترافي كامل للكتابة والقراءة ثنائية الاتجاه (RTL & LTR) والمعادلات الرياضية KaTeX و Markdown.
+            - شريط أدوات التنسيق، وضع القراءة، التنظيم عبر المجلدات، التثبيت، والنسخ الاحتياطي.
+            
+            **طريقة التثبيت:**
+            1. حمل ملف `AcNotes-v1.0.0.apk` من المرفقات أدناه.
+            2. افتح الملف على هاتفك وثبّت التطبيق مباشرة.
+          files: release-output/AcNotes-v1.0.0.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
