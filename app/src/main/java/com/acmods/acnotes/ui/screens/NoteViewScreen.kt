@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -45,7 +46,7 @@ fun NoteViewScreen(
 
     if (note == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("الملاحظة غير موجودة", color = TextSecondary)
+            Text("Note not found", color = TextSecondary)
         }
         return
     }
@@ -73,7 +74,7 @@ fun NoteViewScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.navigateBack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = TextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 actions = {
@@ -85,14 +86,14 @@ fun NoteViewScreen(
                             putExtra(Intent.EXTRA_TEXT, "${note.title}\n\n${note.text}")
                             type = "text/plain"
                         }
-                        context.startActivity(Intent.createChooser(sendIntent, "مشاركة الملاحظة"))
+                        context.startActivity(Intent.createChooser(sendIntent, "Share Note"))
                     }) {
-                        Icon(Icons.Default.Share, contentDescription = "مشاركة", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Share, contentDescription = "Share", tint = TextSecondary, modifier = Modifier.size(20.dp))
                     }
 
                     // Delete
                     IconButton(onClick = { showDeleteConfirm = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "حذف", tint = RedDelete.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = RedDelete.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
                     }
 
                     // Edit
@@ -108,7 +109,7 @@ fun NoteViewScreen(
                     ) {
                         Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("تعديل", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("Edit", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDark)
@@ -127,11 +128,12 @@ fun NoteViewScreen(
                     .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = if (note.title.isNotBlank()) note.title else "بدون عنوان",
+                    text = if (note.title.isNotBlank()) note.title else "Untitled Note",
                     color = TextPrimary,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = 32.sp
+                    lineHeight = 32.sp,
+                    style = androidx.compose.ui.text.TextStyle(textDirection = TextDirection.Content)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -189,8 +191,8 @@ fun NoteViewScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("حذف الملاحظة", color = TextPrimary, fontWeight = FontWeight.Bold) },
-            text = { Text("هل أنت متأكد من حذف هذه الملاحظة نهائياً؟", color = TextSecondary) },
+            title = { Text("Delete Note", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to permanently delete this note?", color = TextSecondary) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -198,12 +200,12 @@ fun NoteViewScreen(
                         viewModel.deleteNote(note.id)
                     }
                 ) {
-                    Text("حذف", color = RedDelete, fontWeight = FontWeight.Bold)
+                    Text("Delete", color = RedDelete, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("إلغاء", color = TextSecondary)
+                    Text("Cancel", color = TextSecondary)
                 }
             },
             containerColor = SurfaceDark

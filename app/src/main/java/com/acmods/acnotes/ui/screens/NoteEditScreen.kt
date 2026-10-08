@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.acmods.acnotes.ui.NotesViewModel
@@ -74,7 +75,7 @@ fun NoteEditScreen(
                             modifier = Modifier.clickable { showFolderMenu = true }
                         ) {
                             Text(
-                                text = if (selectedFolder.isNotBlank()) "📁 $selectedFolder ▾" else "🏠 الرئيسي ▾",
+                                text = if (selectedFolder.isNotBlank()) "📁 $selectedFolder ▾" else "🏠 Root ▾",
                                 color = EmeraldLight,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
@@ -88,7 +89,7 @@ fun NoteEditScreen(
                             modifier = Modifier.background(SurfaceDark)
                         ) {
                             DropdownMenuItem(
-                                text = { Text("🏠 الرئيسي (بدون مجلد)", color = TextPrimary, fontSize = 13.sp) },
+                                text = { Text("🏠 Root (No folder)", color = TextPrimary, fontSize = 13.sp) },
                                 onClick = {
                                     selectedFolder = ""
                                     showFolderMenu = false
@@ -108,7 +109,7 @@ fun NoteEditScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.navigateBack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = TextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
                 actions = {
@@ -131,7 +132,7 @@ fun NoteEditScreen(
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("حفظ", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("Save", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDark)
@@ -154,15 +155,15 @@ fun NoteEditScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FormatChip("B") { insertMarkdown("**", "**", "عريض") }
-                    FormatChip("I") { insertMarkdown("*", "*", "مائل") }
-                    FormatChip("H1") { insertMarkdown("# ", "", "عنوان رئيسي") }
-                    FormatChip("H2") { insertMarkdown("## ", "", "عنوان فرعي") }
-                    FormatChip("• قائمة") { insertMarkdown("- ", "", "عنصر") }
-                    FormatChip("☑ مهمة") { insertMarkdown("- [ ] ", "", "مهمة جديدة") }
-                    FormatChip("❝ اقتباس") { insertMarkdown("> ", "", "اقتباس") }
-                    FormatChip("</> كود") { insertMarkdown("```\n", "\n```", "code") }
-                    FormatChip("🔗 رابط") { insertMarkdown("[عنوان]", "(رابط)") }
+                    FormatChip("B") { insertMarkdown("**", "**", "bold") }
+                    FormatChip("I") { insertMarkdown("*", "*", "italic") }
+                    FormatChip("H1") { insertMarkdown("# ", "", "Heading 1") }
+                    FormatChip("H2") { insertMarkdown("## ", "", "Heading 2") }
+                    FormatChip("• List") { insertMarkdown("- ", "", "item") }
+                    FormatChip("☑ Task") { insertMarkdown("- [ ] ", "", "New task") }
+                    FormatChip("❝ Quote") { insertMarkdown("> ", "", "quote") }
+                    FormatChip("</> Code") { insertMarkdown("```\n", "\n```", "code") }
+                    FormatChip("🔗 Link") { insertMarkdown("[title]", "(url)") }
                 }
             }
         }
@@ -177,7 +178,7 @@ fun NoteEditScreen(
             TextField(
                 value = title,
                 onValueChange = { title = it },
-                placeholder = { Text("عنوان الملاحظة...", color = TextMuted, fontSize = 22.sp, fontWeight = FontWeight.Bold) },
+                placeholder = { Text("Note title...", color = TextMuted, fontSize = 22.sp, fontWeight = FontWeight.Bold) },
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
@@ -191,7 +192,8 @@ fun NoteEditScreen(
                 textStyle = androidx.compose.ui.text.TextStyle(
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = TextPrimary,
+                    textDirection = TextDirection.Content
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -202,7 +204,7 @@ fun NoteEditScreen(
             TextField(
                 value = bodyValue,
                 onValueChange = { bodyValue = it },
-                placeholder = { Text("ابدأ بكتابة أفكارك وملاحظاتك هنا...", color = TextMuted, fontSize = 15.sp) },
+                placeholder = { Text("Start typing your thoughts and notes here...", color = TextMuted, fontSize = 15.sp) },
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
@@ -215,7 +217,8 @@ fun NoteEditScreen(
                 textStyle = androidx.compose.ui.text.TextStyle(
                     fontSize = 15.sp,
                     lineHeight = 24.sp,
-                    color = TextPrimary
+                    color = TextPrimary,
+                    textDirection = TextDirection.Content
                 ),
                 modifier = Modifier
                     .fillMaxWidth()

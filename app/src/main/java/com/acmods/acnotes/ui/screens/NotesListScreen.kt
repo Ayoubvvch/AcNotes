@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,7 +89,7 @@ fun NotesListScreen(
                     .padding(bottom = 16.dp, end = 8.dp)
                     .size(56.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "ملاحظة جديدة", modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.Add, contentDescription = "New Note", modifier = Modifier.size(28.dp))
             }
         }
     ) { paddingValues ->
@@ -147,10 +148,10 @@ fun NotesListScreen(
                             SyncState.IDLE -> EmeraldLight
                         }
                         val textLabel = when (syncState) {
-                            SyncState.SAVED -> "متزامن"
-                            SyncState.SYNCING -> "مزامنة..."
-                            SyncState.OFFLINE -> "أوفلاين"
-                            SyncState.IDLE -> "متصل"
+                            SyncState.SAVED -> "Synced"
+                            SyncState.SYNCING -> "Syncing..."
+                            SyncState.OFFLINE -> "Offline"
+                            SyncState.IDLE -> "Connected"
                         }
                         Box(
                             modifier = Modifier
@@ -168,7 +169,7 @@ fun NotesListScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             Icons.Default.Refresh,
-                            contentDescription = "مزامنة",
+                            contentDescription = "Sync",
                             tint = TextSecondary,
                             modifier = Modifier.size(12.dp)
                         )
@@ -191,7 +192,7 @@ fun NotesListScreen(
                 ) {
                     Icon(
                         Icons.Default.Search,
-                        contentDescription = "بحث",
+                        contentDescription = "Search",
                         tint = TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
@@ -199,7 +200,7 @@ fun NotesListScreen(
                     TextField(
                         value = searchQuery,
                         onValueChange = { viewModel.setSearchQuery(it) },
-                        placeholder = { Text("بحث في الملاحظات...", color = TextMuted, fontSize = 14.sp) },
+                        placeholder = { Text("Search notes...", color = TextMuted, fontSize = 14.sp) },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,
@@ -214,7 +215,7 @@ fun NotesListScreen(
                     )
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.setSearchQuery("") }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "مسح", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = TextSecondary, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -230,7 +231,7 @@ fun NotesListScreen(
             ) {
                 item {
                     FolderChip(
-                        title = "جميع الملاحظات",
+                        title = "All Notes",
                         count = notes.size,
                         isSelected = selectedFolder == "all" && filter == NoteFilter.ALL,
                         onClick = {
@@ -241,7 +242,7 @@ fun NotesListScreen(
                 }
                 item {
                     FolderChip(
-                        title = "المثبتة ⭐",
+                        title = "Pinned ⭐",
                         count = notes.count { it.isPinned },
                         isSelected = filter == NoteFilter.PINNED,
                         onClick = {
@@ -251,7 +252,7 @@ fun NotesListScreen(
                 }
                 item {
                     FolderChip(
-                        title = "الرئيسي 🏠",
+                        title = "Root 🏠",
                         count = notes.count { it.folder.isBlank() },
                         isSelected = selectedFolder == "uncategorized" && filter == NoteFilter.ALL,
                         onClick = {
@@ -280,7 +281,7 @@ fun NotesListScreen(
                         modifier = Modifier.clickable { showNewFolderDialog = true }
                     ) {
                         Text(
-                            text = "+ مجلد",
+                            text = "+ Folder",
                             color = EmeraldLight,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -302,14 +303,14 @@ fun NotesListScreen(
                         Text(text = "📝", fontSize = 42.sp)
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (searchQuery.isNotEmpty()) "لا توجد نتائج بحث" else "لا توجد ملاحظات هنا",
+                            text = if (searchQuery.isNotEmpty()) "No matching notes found" else "No notes here yet",
                             color = TextSecondary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "انقر على زر + للبدء في كتابة أول فكرة",
+                            text = "Tap the + button to create your first note",
                             color = TextMuted,
                             fontSize = 13.sp
                         )
@@ -340,12 +341,12 @@ fun NotesListScreen(
     if (showNewFolderDialog) {
         AlertDialog(
             onDismissRequest = { showNewFolderDialog = false },
-            title = { Text("إنشاء مجلد جديد", color = TextPrimary) },
+            title = { Text("Create New Folder", color = TextPrimary) },
             text = {
                 OutlinedTextField(
                     value = newFolderName,
                     onValueChange = { newFolderName = it },
-                    placeholder = { Text("اسم المجلد (مثال: أفكار، عمل)") },
+                    placeholder = { Text("Folder name (e.g. Ideas, Work)") },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = EmeraldPrimary,
@@ -366,12 +367,12 @@ fun NotesListScreen(
                         showNewFolderDialog = false
                     }
                 ) {
-                    Text("إضافة", color = EmeraldPrimary, fontWeight = FontWeight.Bold)
+                    Text("Create", color = EmeraldPrimary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showNewFolderDialog = false }) {
-                    Text("إلغاء", color = TextSecondary)
+                    Text("Cancel", color = TextSecondary)
                 }
             },
             containerColor = SurfaceDark
@@ -436,12 +437,13 @@ fun NoteCardItem(
                 verticalAlignment = Alignment.Top
             ) {
                 Text(
-                    text = if (note.title.isNotBlank()) note.title else "بدون عنوان",
+                    text = if (note.title.isNotBlank()) note.title else "Untitled Note",
                     color = TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    style = androidx.compose.ui.text.TextStyle(textDirection = TextDirection.Content),
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(
@@ -450,7 +452,7 @@ fun NoteCardItem(
                 ) {
                     Icon(
                         if (note.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                        contentDescription = "تثبيت",
+                        contentDescription = "Pin",
                         tint = if (note.isPinned) AmberPin else TextMuted,
                         modifier = Modifier.size(16.dp)
                     )
@@ -467,7 +469,8 @@ fun NoteCardItem(
                     fontSize = 13.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 18.sp
+                    lineHeight = 18.sp,
+                    style = androidx.compose.ui.text.TextStyle(textDirection = TextDirection.Content)
                 )
                 Spacer(modifier = Modifier.height(10.dp))
             } else {

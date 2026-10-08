@@ -133,7 +133,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
             val note = Note(
                 id = finalId,
-                title = if (title.isNotBlank()) title.trim() else "ملاحظة جديدة",
+                title = if (title.isNotBlank()) title.trim() else "Untitled Note",
                 text = text.trim(),
                 preview = com.acmods.acnotes.data.extractPreview(text.trim()),
                 folder = folder.trim(),

@@ -33,30 +33,31 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.2.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.3.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AcNotes-v2.2.0-APK
-          path: release-output/AcNotes-v2.2.0.apk
+          name: AcNotes-v2.3.0-APK
+          path: release-output/AcNotes-v2.3.0.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v2.2.0
-          name: "AcNotes v2.2.0 - Ultra Smooth 120 FPS Scrolling"
+          tag_name: v2.3.0
+          name: "AcNotes v2.3.0 - English UI with Bidirectional Support"
           body: |
-            ### ⚡ AcNotes v2.2.0 - Ultra Smooth Performance Edition
-            
-            - **القضاء التام على التقطيع أثناء التمرير (Zero-Jank 120 FPS Scrolling):**
-              - تم استخراج وحساب المعاينة (Preview) مسبقاً وتخزينها، مما أوقف ملايين العمليات المتكررة لتقطيع النصوص الكبيرة (`lines().filter()`) أثناء التمرير.
-              - تحسين كامل لمكونات `LazyColumn` مع تثبيت الـ `contentType` والحدود والمظهر الميموري.
-            - **محرك الرياضيات الفائق (KaTeX / LaTeX):**
-              - عرض فائق الجمال لجميع المعادلات الرياضية والتفاضل والتكامل والجداول.
-            - **مزامنة كاملة:** دعم مستودعات الملاحظات الكبيرة بأكثر من 100 ملاحظة.
-          files: release-output/AcNotes-v2.2.0.apk
+            ### 🌐 AcNotes v2.3.0 - Full English UI & Intelligent Bi-Directional Formatting
+
+            - **Full English UI:** Clean, polished English interface inspired by DeepSeek and ChatGPT dark themes.
+            - **Intelligent Bidirectional Typography (RTL + LTR):**
+              - Automatically recognizes language direction for every note, paragraph, and heading.
+              - Arabic notes seamlessly align RTL.
+              - English and bilingual notes align LTR with inline math isolated cleanly.
+            - **Ultra-Smooth 120 FPS:** Zero-allocation preview caching and instant rendering.
+            - **Obsidian-Grade KaTeX & Markdown:** Flawless LaTeX rendering for complex calculus, physics, and markdown tables.
+          files: release-output/AcNotes-v2.3.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
