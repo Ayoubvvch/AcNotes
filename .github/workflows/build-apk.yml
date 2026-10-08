@@ -1,4 +1,4 @@
-name: Build AcNotes APK
+name: Build AcNotes Pure Native APK
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Pure Native Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -33,33 +33,33 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v1.0.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.0.0-PureNative.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AcNotes-APK
-          path: release-output/AcNotes-v1.0.0.apk
+          name: AcNotes-PureNative-APK
+          path: release-output/AcNotes-v2.0.0-PureNative.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.0
-          name: "AcNotes v1.0.0 - Android APK"
+          tag_name: v2.0.0
+          name: "AcNotes v2.0.0 - Pure Native Android (Jetpack Compose)"
           body: |
-            ### 📱 AcNotes v1.0.0
+            ### 🚀 AcNotes v2.0.0 - Pure Native Edition
             
-            - تطبيق ملاحظات أندرويد متكامل وفائق الخفة.
-            - يدعم العمل بدون إنترنت (Offline-First) بشكل كامل مع IndexedDB.
-            - مزامنة سحابية تلقائية مع Cloudflare R2 عند توفر الاتصال.
-            - دعم احترافي كامل للكتابة والقراءة ثنائية الاتجاه (RTL & LTR) والمعادلات الرياضية KaTeX و Markdown.
-            - شريط أدوات التنسيق، وضع القراءة، التنظيم عبر المجلدات، التثبيت، والنسخ الاحتياطي.
+            - **100% Pure Native Android (Kotlin + Jetpack Compose + Material 3)** - Zero WebView / Zero HTML!
+            - أداء فائق وسرعة استجابة فورية 120Hz مستوحاة من تطبيقات النخبة مثل DeepSeek و ChatGPT.
+            - قاعدة بيانات محلية أصلية SQLite فائقة السرعة تعمل بدون إنترنت بنسبة 100%.
+            - محرك Markdown أصلي بالكامل مع مربعات مهام تفاعلية (Interactive Checkboxes).
+            - دعم فائق للنصوص العربية والإنجليزية والاتجاهين (RTL & LTR).
+            - مزامنة سحابية هادئة في الخلفية عبر Coroutines مع Cloudflare R2.
             
             **طريقة التثبيت:**
-            1. حمل ملف `AcNotes-v1.0.0.apk` من المرفقات أدناه.
-            2. افتح الملف على هاتفك وثبّت التطبيق مباشرة.
-          files: release-output/AcNotes-v1.0.0.apk
+            حمل ملف `AcNotes-v2.0.0-PureNative.apk` وثبّته مباشرة.
+          files: release-output/AcNotes-v2.0.0-PureNative.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
