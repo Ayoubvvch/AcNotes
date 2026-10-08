@@ -385,6 +385,7 @@ class R2SyncEngine {
                 id = id,
                 title = title,
                 text = text,
+                preview = extractPreview(text),
                 folder = folder,
                 date = date,
                 updatedAt = updatedAt,

@@ -135,6 +135,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 id = finalId,
                 title = if (title.isNotBlank()) title.trim() else "ملاحظة جديدة",
                 text = text.trim(),
+                preview = com.acmods.acnotes.data.extractPreview(text.trim()),
                 folder = folder.trim(),
                 date = dateStr,
                 updatedAt = now,
@@ -187,9 +188,10 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     line.replace(Regex("\\[[xX]\\]"), "[ ]")
                 }
-                lines[lineIndex] = updatedLine
+                val updatedText = lines.joinToString("\n")
                 val updatedNote = note.copy(
-                    text = lines.joinToString("\n"),
+                    text = updatedText,
+                    preview = com.acmods.acnotes.data.extractPreview(updatedText),
                     updatedAt = System.currentTimeMillis()
                 )
                 dbHelper.saveNote(updatedNote)

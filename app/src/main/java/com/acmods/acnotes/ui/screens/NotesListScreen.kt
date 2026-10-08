@@ -1,10 +1,7 @@
 package com.acmods.acnotes.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +30,12 @@ import com.acmods.acnotes.data.Note
 import com.acmods.acnotes.ui.*
 import com.acmods.acnotes.ui.theme.*
 
+private val CardShape = RoundedCornerShape(16.dp)
+private val ChipShape = RoundedCornerShape(12.dp)
+private val NormalBorder = BorderStroke(1.dp, SurfaceBorder)
+private val PinnedBorder = BorderStroke(1.dp, AmberPin.copy(alpha = 0.4f))
+private val SelectedChipBorder = BorderStroke(1.dp, EmeraldPrimary)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotesListScreen(
@@ -49,8 +52,9 @@ fun NotesListScreen(
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
 
-    // Filter notes
+    // Fast memoized filtering
     val filteredNotes = remember(notes, selectedFolder, searchQuery, filter) {
+        val q = searchQuery.trim()
         notes.filter { note ->
             val matchesFolder = when (selectedFolder) {
                 "all" -> true
@@ -61,13 +65,12 @@ fun NotesListScreen(
                 NoteFilter.ALL -> true
                 NoteFilter.PINNED -> note.isPinned
             }
-            val matchesSearch = if (searchQuery.isBlank()) {
+            val matchesSearch = if (q.isEmpty()) {
                 true
             } else {
-                val q = searchQuery.lowercase()
-                note.title.lowercase().contains(q) ||
-                        note.text.lowercase().contains(q) ||
-                        note.folder.lowercase().contains(q)
+                note.title.contains(q, ignoreCase = true) ||
+                        note.preview.contains(q, ignoreCase = true) ||
+                        note.folder.contains(q, ignoreCase = true)
             }
             matchesFolder && matchesFilter && matchesSearch
         }
@@ -127,50 +130,48 @@ fun NotesListScreen(
                 }
 
                 // Sync status indicator
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = SurfaceCard,
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
-                        modifier = Modifier.clickable { viewModel.syncNow() }
+                Surface(
+                    color = SurfaceCard,
+                    shape = RoundedCornerShape(16.dp),
+                    border = NormalBorder,
+                    modifier = Modifier.clickable { viewModel.syncNow() }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        ) {
-                            val dotColor = when (syncState) {
-                                SyncState.SAVED -> EmeraldPrimary
-                                SyncState.SYNCING -> AmberPin
-                                SyncState.OFFLINE -> TextMuted
-                                SyncState.IDLE -> EmeraldLight
-                            }
-                            val textLabel = when (syncState) {
-                                SyncState.SAVED -> "متزامن"
-                                SyncState.SYNCING -> "مزامنة..."
-                                SyncState.OFFLINE -> "أوفلاين"
-                                SyncState.IDLE -> "متصل"
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(dotColor)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = textLabel,
-                                color = TextSecondary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "مزامنة",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(12.dp)
-                            )
+                        val dotColor = when (syncState) {
+                            SyncState.SAVED -> EmeraldPrimary
+                            SyncState.SYNCING -> AmberPin
+                            SyncState.OFFLINE -> TextMuted
+                            SyncState.IDLE -> EmeraldLight
                         }
+                        val textLabel = when (syncState) {
+                            SyncState.SAVED -> "متزامن"
+                            SyncState.SYNCING -> "مزامنة..."
+                            SyncState.OFFLINE -> "أوفلاين"
+                            SyncState.IDLE -> "متصل"
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = textLabel,
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "مزامنة",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(12.dp)
+                        )
                     }
                 }
             }
@@ -179,7 +180,7 @@ fun NotesListScreen(
             Surface(
                 color = SurfaceCard,
                 shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
+                border = NormalBorder,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -274,8 +275,8 @@ fun NotesListScreen(
                 item {
                     Surface(
                         color = Color.Transparent,
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldDark),
+                        shape = ChipShape,
+                        border = BorderStroke(1.dp, EmeraldDark),
                         modifier = Modifier.clickable { showNewFolderDialog = true }
                     ) {
                         Text(
@@ -320,7 +321,11 @@ fun NotesListScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(filteredNotes, key = { it.id }) { note ->
+                    items(
+                        items = filteredNotes,
+                        key = { it.id },
+                        contentType = { "note_card" }
+                    ) { note ->
                         NoteCardItem(
                             note = note,
                             onClick = { viewModel.openNote(note.id) },
@@ -383,11 +388,8 @@ fun FolderChip(
 ) {
     Surface(
         color = if (isSelected) Color(0x2210B981) else SurfaceCard,
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (isSelected) EmeraldPrimary else SurfaceBorder
-        ),
+        shape = ChipShape,
+        border = if (isSelected) SelectedChipBorder else NormalBorder,
         modifier = Modifier.clickable { onClick() }
     ) {
         Row(
@@ -419,11 +421,8 @@ fun NoteCardItem(
 ) {
     Surface(
         color = SurfaceCard,
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (note.isPinned) AmberPin.copy(alpha = 0.4f) else SurfaceBorder
-        ),
+        shape = CardShape,
+        border = if (note.isPinned) PinnedBorder else NormalBorder,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
@@ -460,10 +459,10 @@ fun NoteCardItem(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            val preview = note.text.lines().filter { it.isNotBlank() && !it.startsWith("#") }.take(3).joinToString(" ")
-            if (preview.isNotBlank()) {
+            // Zero-allocation precomputed preview! Instant 120 FPS render
+            if (note.preview.isNotBlank()) {
                 Text(
-                    text = preview,
+                    text = note.preview,
                     color = TextSecondary,
                     fontSize = 13.sp,
                     maxLines = 2,

@@ -76,11 +76,13 @@ class NotesDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,
             val syncIdx = it.getColumnIndexOrThrow(COL_SYNC_KEY)
 
             while (it.moveToNext()) {
+                val rawText = it.getString(textIdx) ?: ""
                 list.add(
                     Note(
                         id = it.getLong(idIdx),
                         title = it.getString(titleIdx) ?: "",
-                        text = it.getString(textIdx) ?: "",
+                        text = rawText,
+                        preview = extractPreview(rawText),
                         folder = it.getString(folderIdx) ?: "",
                         date = it.getString(dateIdx) ?: "",
                         updatedAt = it.getLong(updatedIdx),
@@ -99,10 +101,12 @@ class NotesDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,
         val cursor = db.query(TABLE_NOTES, null, "$COL_ID = ?", arrayOf(id.toString()), null, null, null)
         cursor.use {
             if (it.moveToFirst()) {
+                val rawText = it.getString(it.getColumnIndexOrThrow(COL_TEXT)) ?: ""
                 return Note(
                     id = it.getLong(it.getColumnIndexOrThrow(COL_ID)),
                     title = it.getString(it.getColumnIndexOrThrow(COL_TITLE)) ?: "",
-                    text = it.getString(it.getColumnIndexOrThrow(COL_TEXT)) ?: "",
+                    text = rawText,
+                    preview = extractPreview(rawText),
                     folder = it.getString(it.getColumnIndexOrThrow(COL_FOLDER)) ?: "",
                     date = it.getString(it.getColumnIndexOrThrow(COL_DATE)) ?: "",
                     updatedAt = it.getLong(it.getColumnIndexOrThrow(COL_UPDATED_AT)),
@@ -201,7 +205,6 @@ class NotesDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME,
     fun deleteFolder(name: String) {
         val db = writableDatabase
         db.delete(TABLE_FOLDERS, "$COL_FOLDER_NAME = ?", arrayOf(name))
-        // move notes in this folder to Home
         val cv = ContentValues().apply { put(COL_FOLDER, "") }
         db.update(TABLE_NOTES, cv, "$COL_FOLDER = ?", arrayOf(name))
     }

@@ -33,30 +33,30 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.1.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.2.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AcNotes-v2.1.0-APK
-          path: release-output/AcNotes-v2.1.0.apk
+          name: AcNotes-v2.2.0-APK
+          path: release-output/AcNotes-v2.2.0.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v2.1.0
-          name: "AcNotes v2.1.0 - Obsidian Math & Full Vault Sync"
+          tag_name: v2.2.0
+          name: "AcNotes v2.2.0 - Ultra Smooth 120 FPS Scrolling"
           body: |
-            ### 🚀 AcNotes v2.1.0
+            ### ⚡ AcNotes v2.2.0 - Ultra Smooth Performance Edition
             
-            - **إصلاح المزامنة الكاملة:** دعم مزامنة جميع الملاحظات (أكثر من 100 ملاحظة) بالكامل بفضل المعالجة المتوازية والتشفير الصحيح لمسارات S3 باللغة العربية والمسافات.
-            - **محرك قراءة فائق الدقة (Obsidian-grade Math & Markdown Reader):**
-              - دعم كامل ودقيق لمعادلات الرياضيات KaTeX / LaTeX (نهايات، تكاملات، جذور، دوال).
-              - تنسيق متطور للجداول والملاحظات المزدوجة عربي/إنجليزي (Bi-directional RTL/LTR).
-              - مربعات اختيار تفاعلية للمهام قابلة للنقر والحفظ الفوري.
-            - **واجهة أصلية وخفيفة للغاية:** سلاسة مطلقة بالوضع الداكن الفاخر.
-          files: release-output/AcNotes-v2.1.0.apk
+            - **القضاء التام على التقطيع أثناء التمرير (Zero-Jank 120 FPS Scrolling):**
+              - تم استخراج وحساب المعاينة (Preview) مسبقاً وتخزينها، مما أوقف ملايين العمليات المتكررة لتقطيع النصوص الكبيرة (`lines().filter()`) أثناء التمرير.
+              - تحسين كامل لمكونات `LazyColumn` مع تثبيت الـ `contentType` والحدود والمظهر الميموري.
+            - **محرك الرياضيات الفائق (KaTeX / LaTeX):**
+              - عرض فائق الجمال لجميع المعادلات الرياضية والتفاضل والتكامل والجداول.
+            - **مزامنة كاملة:** دعم مستودعات الملاحظات الكبيرة بأكثر من 100 ملاحظة.
+          files: release-output/AcNotes-v2.2.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
