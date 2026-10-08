@@ -22,9 +22,7 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+          cache: 'gradle'
 
       - name: Grant Execute Permission to Gradlew
         run: chmod +x gradlew
