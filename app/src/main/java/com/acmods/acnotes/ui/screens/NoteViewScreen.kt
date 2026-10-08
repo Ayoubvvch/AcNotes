@@ -1,11 +1,14 @@
 package com.acmods.acnotes.ui.screens
 
+import android.annotation.SuppressLint
 import android.content.Intent
+import android.webkit.JavascriptInterface
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -21,10 +24,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.acmods.acnotes.ui.MarkdownNativeView
+import androidx.compose.ui.viewinterop.AndroidView
 import com.acmods.acnotes.ui.NotesViewModel
 import com.acmods.acnotes.ui.theme.*
+import org.json.JSONObject
 
+@SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteViewScreen(
@@ -49,14 +54,30 @@ fun NoteViewScreen(
         containerColor = BgDark,
         topBar = {
             TopAppBar(
-                title = {},
+                title = {
+                    if (note.folder.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0x1810B981))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "📁 ${note.folder}",
+                                color = EmeraldLight,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.navigateBack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = TextPrimary)
                     }
                 },
                 actions = {
-                    // Share Note button
+                    // Share
                     IconButton(onClick = {
                         val sendIntent = Intent().apply {
                             action = Intent.ACTION_SEND
@@ -69,12 +90,12 @@ fun NoteViewScreen(
                         Icon(Icons.Default.Share, contentDescription = "مشاركة", tint = TextSecondary, modifier = Modifier.size(20.dp))
                     }
 
-                    // Delete button
+                    // Delete
                     IconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(Icons.Default.Delete, contentDescription = "حذف", tint = RedDelete.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
                     }
 
-                    // Edit button
+                    // Edit
                     Button(
                         onClick = { viewModel.editCurrentNote() },
                         colors = ButtonDefaults.buttonColors(
@@ -98,66 +119,70 @@ fun NoteViewScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            // Title
-            Text(
-                text = if (note.title.isNotBlank()) note.title else "بدون عنوان",
-                color = TextPrimary,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 34.sp
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Meta Info: Date + Folder
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            // Note Title & Date Header in Native Compose
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
-                Text(text = note.date, color = TextMuted, fontSize = 12.sp)
-
-                if (note.folder.isNotBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0x1510B981))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "📁 ${note.folder}",
-                            color = EmeraldLight,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Divider(color = SurfaceBorder, thickness = 1.dp)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Native Markdown Rendered Body
-            if (note.text.isNotBlank()) {
-                MarkdownNativeView(
-                    content = note.text,
-                    onToggleTask = { lineIdx, isChecked ->
-                        viewModel.toggleTaskInNote(note.id, lineIdx, isChecked)
-                    }
-                )
-            } else {
                 Text(
-                    text = "ملاحظة فارغة.",
+                    text = if (note.title.isNotBlank()) note.title else "بدون عنوان",
+                    color = TextPrimary,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 32.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = note.date,
                     color = TextMuted,
-                    fontSize = 14.sp,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    fontSize = 12.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(60.dp))
+            Divider(color = SurfaceBorder, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+            // High-Fidelity KaTeX & Markdown Reader Surface
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        setBackgroundColor(0xFF09090B.toInt())
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            allowFileAccess = true
+                            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            cacheMode = WebSettings.LOAD_DEFAULT
+                        }
+                        isVerticalScrollBarEnabled = false
+
+                        addJavascriptInterface(object {
+                            @JavascriptInterface
+                            fun toggleTask(lineIndex: Int, isChecked: Boolean) {
+                                viewModel.toggleTaskInNote(note.id, lineIndex, isChecked)
+                            }
+                        }, "AndroidBridge")
+
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                super.onPageFinished(view, url)
+                                val jsonStr = JSONObject.quote(note.text)
+                                view?.evaluateJavascript("renderMarkdownWithMath($jsonStr)", null)
+                            }
+                        }
+
+                        loadUrl("file:///android_asset/reader/template.html")
+                    }
+                },
+                update = { webView ->
+                    val jsonStr = JSONObject.quote(note.text)
+                    webView.evaluateJavascript("renderMarkdownWithMath($jsonStr)", null)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
         }
     }
 

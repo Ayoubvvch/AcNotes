@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ar" dir="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="stylesheet" href="katex.min.css">
+<script src="katex.min.js"></script>
+<script src="katex-auto-render.min.js"></script>
+<script src="marked.min.js"></script>
+<script src="purify.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body {
+    background: #09090b;
+    color: #e4e4e7;
+    font-family: system-ui, -apple-system, 'Tajawal', 'Cairo', 'Segoe UI', Roboto, sans-serif;
+    margin: 0;
+    padding: 16px 18px 80px 18px;
+    line-height: 1.85;
+    font-size: 16.5px;
+    -webkit-tap-highlight-color: transparent;
+    word-break: break-word;
+}
+h1, h2, h3, h4, h5, h6, p, li, blockquote, div {
+    unicode-bidi: plaintext;
+    text-align: start;
+}
+h1 { font-size: 1.95rem; color: #f4f4f5; font-weight: 800; margin: 1.2em 0 0.5em; line-height: 1.3; }
+h2 { font-size: 1.5rem; color: #e4e4e7; font-weight: 700; margin: 1.2em 0 0.4em; border-bottom: 1px solid #27272a; padding-bottom: 0.3em; }
+h3 { font-size: 1.25rem; color: #e4e4e7; font-weight: 600; margin: 1em 0 0.3em; }
+h4 { font-size: 1.1rem; color: #d4d4d8; font-weight: 600; margin: 0.8em 0 0.3em; }
+p { margin-bottom: 1.2em; color: #d4d4d8; }
+a { color: #34d399; text-decoration: none; font-weight: 500; }
+a:hover { text-decoration: underline; }
+ul, ol { padding-inline-start: 1.8em; margin-bottom: 1.2em; }
+li { margin-bottom: 0.4em; color: #d4d4d8; }
+li.task-item { list-style-type: none !important; margin-inline-start: -1.2em; display: flex; align-items: baseline; gap: 0.6rem; }
+li.task-done { color: #71717a; text-decoration: line-through; }
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.25em; height: 1.25em;
+    border: 1.5px solid #52525b; border-radius: 4px;
+    background-color: #18181b; cursor: pointer;
+    vertical-align: middle; position: relative; top: 0.2em;
+    margin-inline-end: 0.35em; flex-shrink: 0;
+}
+input[type="checkbox"]:checked { background-color: #10b981; border-color: #10b981; }
+input[type="checkbox"]:checked::after {
+    content: ''; position: absolute; left: 4px; top: 1px;
+    width: 4px; height: 8px; border: solid #022c22;
+    border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+blockquote {
+    border-inline-start: 4px solid #10b981;
+    padding: 10px 16px;
+    margin: 1.2em 0;
+    background-color: rgba(16, 185, 129, 0.06);
+    border-radius: 0 10px 10px 0;
+    color: #a1a1aa;
+}
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; direction: ltr !important; text-align: left !important; unicode-bidi: isolate !important; }
+code { background: #18181b; color: #34d399; padding: 0.2em 0.45em; border-radius: 6px; font-size: 0.88em; border: 1px solid #27272a; }
+pre { background: #121215; padding: 14px; border-radius: 12px; overflow-x: auto; margin-bottom: 1.4em; border: 1px solid #27272a; font-size: 0.88em; }
+pre code { background: transparent; padding: 0; color: #e4e4e7; border: none; }
+hr { border: none; border-top: 1px solid #27272a; margin: 2em 0; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 1.5em; font-size: 0.9em; }
+th { background: #18181b; color: #e4e4e7; padding: 10px 12px; border: 1px solid #27272a; font-weight: 600; text-align: start; }
+td { padding: 10px 12px; border: 1px solid #27272a; color: #d4d4d8; text-align: start; }
+tr:nth-child(even) { background-color: rgba(255,255,255,0.02); }
+img { max-width: 100%; border-radius: 12px; margin: 1em 0; }
+
+/* KaTeX Math Styling */
+.katex-display {
+    overflow-x: auto; overflow-y: hidden;
+    padding: 0.8em 0; margin: 1.2em 0;
+    direction: ltr !important;
+    color: #34d399;
+    unicode-bidi: isolate !important;
+    text-align: center !important;
+}
+.katex {
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+    font-size: 1.1em;
+    color: #34d399;
+}
+</style>
+</head>
+<body>
+<div id="content"></div>
+
+<script>
+function renderMarkdownWithMath(raw) {
+    if (!raw) {
+        document.getElementById('content').innerHTML = '<p style="color:#71717a;font-style:italic">ملاحظة فارغة.</p>';
+        return;
+    }
+
+    // Step 1: Escape Math Blocks to protect LaTeX from Marked parser
+    var mathBlocks = [];
+    var processed = raw.replace(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\(.*?\\\)|\$[^$\n]+\$)/g, function(match) {
+        mathBlocks.push(match);
+        return '@@MATH_' + (mathBlocks.length - 1) + '@@';
+    });
+
+    // Step 2: Parse Markdown
+    var rawHtml = marked.parse(processed, { breaks: true });
+
+    // Step 3: Restore Math Blocks
+    for (var i = 0; i < mathBlocks.length; i++) {
+        rawHtml = rawHtml.replace('@@MATH_' + i + '@@', mathBlocks[i]);
+    }
+
+    // Step 4: Sanitize HTML
+    var cleanHtml = DOMPurify.sanitize(rawHtml, {
+        ADD_TAGS: ['input'],
+        ADD_ATTR: ['dir', 'type', 'checked', 'disabled', 'data-line-index'],
+        ALLOW_DATA_ATTR: true
+    });
+
+    var container = document.getElementById('content');
+    container.innerHTML = cleanHtml;
+
+    // Step 5: Format task items
+    var lis = container.querySelectorAll('li');
+    var taskIdx = 0;
+    lis.forEach(function(li) {
+        var checkbox = li.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+            li.classList.add('task-item');
+            checkbox.removeAttribute('disabled');
+            checkbox.setAttribute('data-line-index', taskIdx++);
+            if (checkbox.checked) li.classList.add('task-done');
+
+            checkbox.onchange = function() {
+                if (checkbox.checked) li.classList.add('task-done');
+                else li.classList.remove('task-done');
+                if (window.AndroidBridge && window.AndroidBridge.toggleTask) {
+                    window.AndroidBridge.toggleTask(parseInt(checkbox.getAttribute('data-line-index'), 10), checkbox.checked);
+                }
+            };
+        }
+    });
+
+    // Step 6: Render KaTeX math
+    if (window.renderMathInElement) {
+        renderMathInElement(container, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '\\[', right: '\\]', display: true},
+                {left: '$', right: '$', display: false},
+                {left: '\\(', right: '\\)', display: false}
+            ],
+            throwOnError: false
+        });
+    }
+}
+</script>
+</body>
+</html>

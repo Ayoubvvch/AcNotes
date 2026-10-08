@@ -33,33 +33,30 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.0.0-PureNative.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.1.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AcNotes-PureNative-APK
-          path: release-output/AcNotes-v2.0.0-PureNative.apk
+          name: AcNotes-v2.1.0-APK
+          path: release-output/AcNotes-v2.1.0.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v2.0.0
-          name: "AcNotes v2.0.0 - Pure Native Android (Jetpack Compose)"
+          tag_name: v2.1.0
+          name: "AcNotes v2.1.0 - Obsidian Math & Full Vault Sync"
           body: |
-            ### 🚀 AcNotes v2.0.0 - Pure Native Edition
+            ### 🚀 AcNotes v2.1.0
             
-            - **100% Pure Native Android (Kotlin + Jetpack Compose + Material 3)** - Zero WebView / Zero HTML!
-            - أداء فائق وسرعة استجابة فورية 120Hz مستوحاة من تطبيقات النخبة مثل DeepSeek و ChatGPT.
-            - قاعدة بيانات محلية أصلية SQLite فائقة السرعة تعمل بدون إنترنت بنسبة 100%.
-            - محرك Markdown أصلي بالكامل مع مربعات مهام تفاعلية (Interactive Checkboxes).
-            - دعم فائق للنصوص العربية والإنجليزية والاتجاهين (RTL & LTR).
-            - مزامنة سحابية هادئة في الخلفية عبر Coroutines مع Cloudflare R2.
-            
-            **طريقة التثبيت:**
-            حمل ملف `AcNotes-v2.0.0-PureNative.apk` وثبّته مباشرة.
-          files: release-output/AcNotes-v2.0.0-PureNative.apk
+            - **إصلاح المزامنة الكاملة:** دعم مزامنة جميع الملاحظات (أكثر من 100 ملاحظة) بالكامل بفضل المعالجة المتوازية والتشفير الصحيح لمسارات S3 باللغة العربية والمسافات.
+            - **محرك قراءة فائق الدقة (Obsidian-grade Math & Markdown Reader):**
+              - دعم كامل ودقيق لمعادلات الرياضيات KaTeX / LaTeX (نهايات، تكاملات، جذور، دوال).
+              - تنسيق متطور للجداول والملاحظات المزدوجة عربي/إنجليزي (Bi-directional RTL/LTR).
+              - مربعات اختيار تفاعلية للمهام قابلة للنقر والحفظ الفوري.
+            - **واجهة أصلية وخفيفة للغاية:** سلاسة مطلقة بالوضع الداكن الفاخر.
+          files: release-output/AcNotes-v2.1.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

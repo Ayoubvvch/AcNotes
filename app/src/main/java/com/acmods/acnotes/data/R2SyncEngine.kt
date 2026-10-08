@@ -1,8 +1,9 @@
 package com.acmods.acnotes.data
 
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -31,40 +32,61 @@ class R2SyncEngine {
     }
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
         .build()
+
+    private fun encodeKeyForUrl(key: String): String {
+        return key.split("/").joinToString("/") { segment ->
+            URLEncoder.encode(segment, "UTF-8").replace("+", "%20")
+        }
+    }
 
     suspend fun sync(dbHelper: NotesDbHelper): Boolean = withContext(Dispatchers.IO) {
         try {
             val localNotes = dbHelper.getAllNotes()
             val deletedIds = dbHelper.getDeletedIds()
 
-            // Step 1: List remote objects
+            // Step 1: List all remote keys in .Vault/
             val remoteKeys = listVaultKeys() ?: return@withContext false
+            val mdKeys = remoteKeys.filter { it.endsWith(".md") }
 
-            val remoteNotes = mutableListOf<Note>()
-            for (key in remoteKeys) {
-                if (key.endsWith(".md")) {
-                    val content = getObject(key)
-                    if (content != null) {
-                        val parsed = parseMdFile(key, content)
-                        if (parsed != null && !deletedIds.contains(parsed.id)) {
-                            remoteNotes.add(parsed)
+            Log.i(TAG, "Found ${mdKeys.size} markdown files on Cloudflare R2")
+
+            // Step 2: Download remote files concurrently (up to 8 in parallel)
+            val semaphore = Semaphore(8)
+            val downloadedNotes = coroutineScope {
+                mdKeys.map { key ->
+                    async {
+                        semaphore.withPermit {
+                            try {
+                                val content = getObject(key)
+                                if (content != null) {
+                                    val parsed = parseMdFile(key, content)
+                                    if (parsed != null && !deletedIds.contains(parsed.id)) {
+                                        return@withPermit parsed
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed downloading note $key: ${e.message}")
+                            }
+                            null
                         }
                     }
-                }
+                }.awaitAll().filterNotNull()
             }
 
-            // Step 2: Merge local & remote
+            Log.i(TAG, "Successfully downloaded ${downloadedNotes.size} notes from R2")
+
+            // Step 3: Timestamp-based merge with local database
             val mergedMap = mutableMapOf<Long, Note>()
             for (local in localNotes) {
                 if (!deletedIds.contains(local.id)) {
                     mergedMap[local.id] = local
                 }
             }
-            for (remote in remoteNotes) {
+            for (remote in downloadedNotes) {
                 val existing = mergedMap[remote.id]
                 if (existing == null) {
                     mergedMap[remote.id] = remote
@@ -75,22 +97,35 @@ class R2SyncEngine {
                 }
             }
 
-            // Save merged list to local DB
+            // Save all merged notes to local SQLite
             val finalNotes = mergedMap.values.toList()
             dbHelper.saveAll(finalNotes)
 
-            // Step 3: Upload any local notes that are newer than remote or missing remotely
-            val remoteMap = remoteNotes.associateBy { it.id }
+            // Extract and register all folders
             for (note in finalNotes) {
-                val rem = remoteMap[note.id]
-                if (rem == null || note.updatedAt > rem.updatedAt) {
-                    putNote(note)
+                if (note.folder.isNotBlank()) {
+                    dbHelper.addFolder(note.folder.trim())
                 }
+            }
+
+            // Step 4: Upload notes that are newer locally or missing remotely
+            val remoteMap = downloadedNotes.associateBy { it.id }
+            coroutineScope {
+                finalNotes.map { note ->
+                    async {
+                        val rem = remoteMap[note.id]
+                        if (rem == null || note.updatedAt > rem.updatedAt) {
+                            semaphore.withPermit {
+                                putNote(note)
+                            }
+                        }
+                    }
+                }.awaitAll()
             }
 
             true
         } catch (e: Exception) {
-            Log.w(TAG, "Sync error: ${e.message}")
+            Log.e(TAG, "Sync failed: ${e.message}", e)
             false
         }
     }
@@ -98,17 +133,18 @@ class R2SyncEngine {
     suspend fun putNote(note: Note): Boolean = withContext(Dispatchers.IO) {
         try {
             val key = getNoteKey(note)
+            val encodedKey = encodeKeyForUrl(key)
             val content = serializeNoteToMd(note)
             val date = getAmzDate()
             val shortDate = getShortDate()
 
-            val url = "$BASE_URL/$key"
+            val url = "$BASE_URL/$encodedKey"
             val body = content.toByteArray(Charsets.UTF_8)
             val payloadHash = sha256Hex(body)
 
             val canonicalHeaders = "host:$ENDPOINT_HOST\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
             val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-            val canonicalRequest = "PUT\n/$BUCKET/$key\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "PUT\n/$BUCKET/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
 
             val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
 
@@ -133,18 +169,19 @@ class R2SyncEngine {
     suspend fun deleteNoteRemote(note: Note): Boolean = withContext(Dispatchers.IO) {
         try {
             val key = getNoteKey(note)
+            val encodedKey = encodeKeyForUrl(key)
             val date = getAmzDate()
             val shortDate = getShortDate()
             val payloadHash = sha256Hex(ByteArray(0))
 
             val canonicalHeaders = "host:$ENDPOINT_HOST\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
             val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-            val canonicalRequest = "DELETE\n/$BUCKET/$key\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "DELETE\n/$BUCKET/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
 
             val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
 
             val request = Request.Builder()
-                .url("$BASE_URL/$key")
+                .url("$BASE_URL/$encodedKey")
                 .delete()
                 .header("Host", ENDPOINT_HOST)
                 .header("x-amz-date", date)
@@ -195,18 +232,19 @@ class R2SyncEngine {
 
     private fun getObject(key: String): String? {
         return try {
+            val encodedKey = encodeKeyForUrl(key)
             val date = getAmzDate()
             val shortDate = getShortDate()
             val payloadHash = sha256Hex(ByteArray(0))
 
             val canonicalHeaders = "host:$ENDPOINT_HOST\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
             val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-            val canonicalRequest = "GET\n/$BUCKET/$key\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "GET\n/$BUCKET/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
 
             val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
 
             val request = Request.Builder()
-                .url("$BASE_URL/$key")
+                .url("$BASE_URL/$encodedKey")
                 .get()
                 .header("Host", ENDPOINT_HOST)
                 .header("x-amz-date", date)
@@ -218,6 +256,7 @@ class R2SyncEngine {
                 if (resp.isSuccessful) resp.body?.string() else null
             }
         } catch (e: Exception) {
+            Log.w(TAG, "getObject failed for $key: ${e.message}")
             null
         }
     }
@@ -314,7 +353,6 @@ class R2SyncEngine {
         }
     }
 
-    // AWS SigV4 cryptographic helpers
     private fun buildAuthHeader(canonicalRequest: String, shortDate: String, amzDate: String, signedHeaders: String): String {
         val stringToSign = "AWS4-HMAC-SHA256\n$amzDate\n$shortDate/$REGION/$SERVICE/aws4_request\n${sha256Hex(canonicalRequest.toByteArray(Charsets.UTF_8))}"
         val signingKey = getSignatureKey(SECRET_KEY, shortDate, REGION, SERVICE)
