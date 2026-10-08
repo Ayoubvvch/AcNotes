@@ -79,22 +79,44 @@ class R2SyncEngine {
 
             Log.i(TAG, "Successfully downloaded ${downloadedNotes.size} notes from R2")
 
-            // Step 3: Timestamp-based merge with local database
+            // Step 3: Two-way merge with deletion synchronization
+            val remoteMap = downloadedNotes.associateBy { it.id }
             val mergedMap = mutableMapOf<Long, Note>()
+            val notesToDeleteLocally = mutableListOf<Long>()
+
             for (local in localNotes) {
-                if (!deletedIds.contains(local.id)) {
-                    mergedMap[local.id] = local
+                if (deletedIds.contains(local.id)) {
+                    val remKey = local.syncKey ?: getNoteKey(local)
+                    deleteKeyRemote(remKey)
+                    continue
                 }
-            }
-            for (remote in downloadedNotes) {
-                val existing = mergedMap[remote.id]
-                if (existing == null) {
-                    mergedMap[remote.id] = remote
+
+                val rem = remoteMap[local.id]
+                if (rem != null) {
+                    if (rem.updatedAt > local.updatedAt) {
+                        mergedMap[local.id] = rem
+                    } else {
+                        mergedMap[local.id] = local
+                    }
                 } else {
-                    if (remote.updatedAt > existing.updatedAt) {
-                        mergedMap[remote.id] = remote
+                    if (local.syncKey != null) {
+                        // Previously synced to R2, but no longer on R2 -> deleted remotely!
+                        notesToDeleteLocally.add(local.id)
+                    } else {
+                        // Brand new local note, keep it to upload
+                        mergedMap[local.id] = local
                     }
                 }
+            }
+
+            for (remote in downloadedNotes) {
+                if (!mergedMap.containsKey(remote.id) && !deletedIds.contains(remote.id)) {
+                    mergedMap[remote.id] = remote
+                }
+            }
+
+            for (delId in notesToDeleteLocally) {
+                dbHelper.deleteNote(delId)
             }
 
             // Save all merged notes to local SQLite
@@ -108,15 +130,27 @@ class R2SyncEngine {
                 }
             }
 
-            // Step 4: Upload notes that are newer locally or missing remotely
-            val remoteMap = downloadedNotes.associateBy { it.id }
+            // Step 4: Upload notes that are newer locally, or renamed/moved, or new
             coroutineScope {
                 finalNotes.map { note ->
                     async {
                         val rem = remoteMap[note.id]
-                        if (rem == null || note.updatedAt > rem.updatedAt) {
+                        val targetKey = getNoteKey(note)
+                        val isNewer = rem == null || note.updatedAt > rem.updatedAt
+                        val keyChanged = note.syncKey != null && note.syncKey != targetKey
+
+                        if (keyChanged) {
                             semaphore.withPermit {
-                                putNote(note)
+                                deleteKeyRemote(note.syncKey)
+                            }
+                        }
+
+                        if (isNewer || keyChanged) {
+                            semaphore.withPermit {
+                                val updatedNote = note.copy(syncKey = targetKey)
+                                if (putNote(updatedNote)) {
+                                    dbHelper.saveNote(updatedNote)
+                                }
                             }
                         }
                     }
@@ -166,9 +200,8 @@ class R2SyncEngine {
         }
     }
 
-    suspend fun deleteNoteRemote(note: Note): Boolean = withContext(Dispatchers.IO) {
+    suspend fun deleteKeyRemote(key: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val key = getNoteKey(note)
             val encodedKey = encodeKeyForUrl(key)
             val date = getAmzDate()
             val shortDate = getShortDate()
@@ -195,6 +228,11 @@ class R2SyncEngine {
         } catch (e: Exception) {
             false
         }
+    }
+
+    suspend fun deleteNoteRemote(note: Note): Boolean = withContext(Dispatchers.IO) {
+        val key = note.syncKey ?: getNoteKey(note)
+        deleteKeyRemote(key)
     }
 
     private fun listVaultKeys(): List<String>? {
@@ -309,8 +347,13 @@ class R2SyncEngine {
         try {
             val parts = key.split("/").filter { it.isNotBlank() }
             val folder = if (parts.size > 2) parts.subList(1, parts.size - 1).joinToString("/") else ""
-            var id = System.currentTimeMillis()
             var title = parts.lastOrNull()?.removeSuffix(".md") ?: "Untitled"
+            val keyHash = key + title
+            var hash = 0L
+            for (ch in keyHash) {
+                hash = ((hash shl 5) - hash) + ch.code.toLong()
+            }
+            var id = kotlin.math.abs(hash) % 900000000000L + 1000000000000L
             var date = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date())
             var updatedAt = id
             var pinned = false
