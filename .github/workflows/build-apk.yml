@@ -33,31 +33,33 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.3.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.4.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AcNotes-v2.3.0-APK
-          path: release-output/AcNotes-v2.3.0.apk
+          name: AcNotes-v2.4.0-APK
+          path: release-output/AcNotes-v2.4.0.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v2.3.0
-          name: "AcNotes v2.3.0 - English UI with Bidirectional Support"
+          tag_name: v2.4.0
+          name: "AcNotes v2.4.0 - Ultra Smooth Motion & Physics Transitions"
           body: |
-            ### 🌐 AcNotes v2.3.0 - Full English UI & Intelligent Bi-Directional Formatting
+            ### ✨ AcNotes v2.4.0 - Ultra Smooth Motion & Native Physics Edition
 
-            - **Full English UI:** Clean, polished English interface inspired by DeepSeek and ChatGPT dark themes.
-            - **Intelligent Bidirectional Typography (RTL + LTR):**
-              - Automatically recognizes language direction for every note, paragraph, and heading.
-              - Arabic notes seamlessly align RTL.
-              - English and bilingual notes align LTR with inline math isolated cleanly.
-            - **Ultra-Smooth 120 FPS:** Zero-allocation preview caching and instant rendering.
-            - **Obsidian-Grade KaTeX & Markdown:** Flawless LaTeX rendering for complex calculus, physics, and markdown tables.
-          files: release-output/AcNotes-v2.3.0.apk
+            - **Seamless Predictive Screen Transitions:**
+              - Parallax slide & fade navigation when opening, editing, and closing notes.
+              - Predictive backward sliding and header drag-back gesture.
+            - **Tactile Physics Feedback:**
+              - Physical scale-spring compression on card touches with zero dropped frames.
+            - **Hardware-Accelerated WebView & GPU Layer Promotion:**
+              - Enabled hardware layer (`LAYER_TYPE_HARDWARE`) and `offscreenPreRaster` in reader WebView.
+              - Deduplicated JavaScript markdown parsing to prevent animation jank.
+              - Promoted reader to dedicated GPU composite layer (`translateZ(0)`) with `content-visibility: auto` for instant 120 FPS scrolling through 20,000+ word notes.
+          files: release-output/AcNotes-v2.4.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

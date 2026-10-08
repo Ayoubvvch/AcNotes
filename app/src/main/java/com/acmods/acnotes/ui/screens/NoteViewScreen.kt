@@ -7,6 +7,8 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -122,10 +124,27 @@ fun NoteViewScreen(
                 .padding(paddingValues)
         ) {
             // Note Title & Date Header in Native Compose
+            var swipeOffset by remember { mutableFloatStateOf(0f) }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (swipeOffset > 80f) {
+                                    viewModel.navigateBack()
+                                }
+                                swipeOffset = 0f
+                            },
+                            onDragCancel = { swipeOffset = 0f },
+                            onHorizontalDrag = { _, dragAmount ->
+                                if (dragAmount > 0 || swipeOffset > 0) {
+                                    swipeOffset += dragAmount
+                                }
+                            }
+                        )
+                    }
             ) {
                 Text(
                     text = if (note.title.isNotBlank()) note.title else "Untitled Note",
@@ -145,19 +164,25 @@ fun NoteViewScreen(
 
             Divider(color = SurfaceBorder, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
 
+            var lastRenderedText by remember(note.id) { mutableStateOf<String?>(null) }
+
             // High-Fidelity KaTeX & Markdown Reader Surface
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
                         setBackgroundColor(0xFF09090B.toInt())
+                        setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                        overScrollMode = android.view.View.OVER_SCROLL_NEVER
+                        isVerticalScrollBarEnabled = false
+                        isHorizontalScrollBarEnabled = false
                         settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
                             allowFileAccess = true
                             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                             cacheMode = WebSettings.LOAD_DEFAULT
+                            offscreenPreRaster = true
                         }
-                        isVerticalScrollBarEnabled = false
 
                         addJavascriptInterface(object {
                             @JavascriptInterface
@@ -169,6 +194,7 @@ fun NoteViewScreen(
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
+                                lastRenderedText = note.text
                                 val jsonStr = JSONObject.quote(note.text)
                                 view?.evaluateJavascript("renderMarkdownWithMath($jsonStr)", null)
                             }
@@ -178,8 +204,11 @@ fun NoteViewScreen(
                     }
                 },
                 update = { webView ->
-                    val jsonStr = JSONObject.quote(note.text)
-                    webView.evaluateJavascript("renderMarkdownWithMath($jsonStr)", null)
+                    if (lastRenderedText != note.text) {
+                        lastRenderedText = note.text
+                        val jsonStr = JSONObject.quote(note.text)
+                        webView.evaluateJavascript("renderMarkdownWithMath($jsonStr)", null)
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()

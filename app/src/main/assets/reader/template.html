@@ -10,6 +10,10 @@
 <script src="purify.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box}
+html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+}
 body {
     background: #09090b;
     color: #e4e4e7;
@@ -20,6 +24,13 @@ body {
     font-size: 16.5px;
     -webkit-tap-highlight-color: transparent;
     word-break: break-word;
+    text-rendering: optimizeSpeed;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+}
+p, li, pre, table, .katex-display {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 35px;
 }
 h1, h2, h3, h4, h5, h6, p, li, blockquote, div {
     unicode-bidi: plaintext;
