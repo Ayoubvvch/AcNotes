@@ -137,11 +137,14 @@ class R2SyncEngine {
                         val rem = remoteMap[note.id]
                         val targetKey = getNoteKey(note)
                         val isNewer = rem == null || note.updatedAt > rem.updatedAt
-                        val keyChanged = note.syncKey != null && note.syncKey != targetKey
+                        val oldKey = note.syncKey
+                        val keyChanged = oldKey != null && oldKey != targetKey
 
-                        if (keyChanged) {
-                            semaphore.withPermit {
-                                deleteKeyRemote(note.syncKey)
+                        oldKey?.let { k ->
+                            if (k != targetKey) {
+                                semaphore.withPermit {
+                                    deleteKeyRemote(k)
+                                }
                             }
                         }
 
