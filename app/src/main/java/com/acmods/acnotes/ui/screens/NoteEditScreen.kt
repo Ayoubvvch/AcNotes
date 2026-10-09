@@ -1,5 +1,6 @@
 package com.acmods.acnotes.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -45,6 +46,65 @@ fun NoteEditScreen(
     }
     var showFolderMenu by remember { mutableStateOf(false) }
 
+    // Auto-save on back or navigation
+    val onBackAction: () -> Unit = {
+        if (title.isNotBlank() || bodyValue.text.isNotBlank()) {
+            viewModel.saveNote(
+                id = noteId,
+                title = title,
+                text = bodyValue.text,
+                folder = selectedFolder
+            )
+        } else {
+            viewModel.navigateBack()
+        }
+    }
+    BackHandler { onBackAction() }
+
+    fun handleSmartEnter(oldVal: TextFieldValue, newVal: TextFieldValue): TextFieldValue {
+        val oldText = oldVal.text
+        val newText = newVal.text
+        val cursor = newVal.selection.start
+        if (newText.length == oldText.length + 1 && cursor > 0 && newText[cursor - 1] == '\n') {
+            val lineStart = newText.lastIndexOf('\n', cursor - 2) + 1
+            val prevLine = newText.substring(lineStart, cursor - 1)
+
+            val taskRegex = Regex("^(\\s*[-*+]\\s*\\[[ xX]\\]\\s*)")
+            val bulletRegex = Regex("^(\\s*[-*+]\\s*)")
+
+            val taskMatch = taskRegex.find(prevLine)
+            if (taskMatch != null) {
+                val prefix = taskMatch.value
+                return if (prevLine.trim() == prefix.trim()) {
+                    // Empty task item: cancel out marker on enter
+                    val cleaned = newText.substring(0, lineStart) + newText.substring(cursor)
+                    TextFieldValue(cleaned, TextRange(lineStart))
+                } else {
+                    val indent = prefix.takeWhile { it.isWhitespace() }
+                    val auto = "$indent- [ ] "
+                    val result = newText.substring(0, cursor) + auto + newText.substring(cursor)
+                    TextFieldValue(result, TextRange(cursor + auto.length))
+                }
+            }
+
+            val bulletMatch = bulletRegex.find(prevLine)
+            if (bulletMatch != null) {
+                val prefix = bulletMatch.value
+                return if (prevLine.trim() == prefix.trim()) {
+                    // Empty bullet: cancel out marker on enter
+                    val cleaned = newText.substring(0, lineStart) + newText.substring(cursor)
+                    TextFieldValue(cleaned, TextRange(lineStart))
+                } else {
+                    val indent = prefix.takeWhile { it.isWhitespace() }
+                    val auto = "$indent- "
+                    val result = newText.substring(0, cursor) + auto + newText.substring(cursor)
+                    TextFieldValue(result, TextRange(cursor + auto.length))
+                }
+            }
+        }
+        return newVal
+    }
+
     fun insertMarkdown(prefix: String, suffix: String = "", placeholder: String = "") {
         val text = bodyValue.text
         val selection = bodyValue.selection
@@ -60,6 +120,15 @@ fun NoteEditScreen(
             text = newText,
             selection = TextRange(newCursor)
         )
+    }
+
+    fun insertHeading(level: String) {
+        val text = bodyValue.text
+        val selection = bodyValue.selection
+        val lineStart = (text.lastIndexOf('\n', (selection.start - 1).coerceAtLeast(0)) + 1).coerceAtLeast(0)
+        val newText = text.substring(0, lineStart) + level + text.substring(lineStart)
+        val newCursor = selection.start + level.length
+        bodyValue = TextFieldValue(newText, TextRange(newCursor))
     }
 
     Scaffold(
@@ -108,7 +177,7 @@ fun NoteEditScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { viewModel.navigateBack() }) {
+                    IconButton(onClick = onBackAction) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
                 },
@@ -157,12 +226,14 @@ fun NoteEditScreen(
                 ) {
                     FormatChip("B") { insertMarkdown("**", "**", "bold") }
                     FormatChip("I") { insertMarkdown("*", "*", "italic") }
-                    FormatChip("H1") { insertMarkdown("# ", "", "Heading 1") }
-                    FormatChip("H2") { insertMarkdown("## ", "", "Heading 2") }
+                    FormatChip("H1") { insertHeading("# ") }
+                    FormatChip("H2") { insertHeading("## ") }
                     FormatChip("• List") { insertMarkdown("- ", "", "item") }
                     FormatChip("☑ Task") { insertMarkdown("- [ ] ", "", "New task") }
                     FormatChip("❝ Quote") { insertMarkdown("> ", "", "quote") }
                     FormatChip("</> Code") { insertMarkdown("```\n", "\n```", "code") }
+                    FormatChip("∑ Math") { insertMarkdown("$$\n", "\n$$", "E = mc^2") }
+                    FormatChip("x² Math") { insertMarkdown("$", "$", "x^2") }
                     FormatChip("🔗 Link") { insertMarkdown("[title]", "(url)") }
                 }
             }
@@ -200,10 +271,12 @@ fun NoteEditScreen(
 
             Divider(color = SurfaceBorder, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-            // Body Input
+            // Body Input with Smart List/Task auto-continuation
             TextField(
                 value = bodyValue,
-                onValueChange = { bodyValue = it },
+                onValueChange = { newBody ->
+                    bodyValue = handleSmartEnter(bodyValue, newBody)
+                },
                 placeholder = { Text("Start typing your thoughts and notes here...", color = TextMuted, fontSize = 15.sp) },
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,

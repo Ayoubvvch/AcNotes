@@ -59,7 +59,7 @@ fun NotesListScreen(
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
 
-    // Fast memoized filtering
+    // Fast memoized filtering across full note content
     val filteredNotes = remember(notes, selectedFolder, searchQuery, filter) {
         val q = searchQuery.trim()
         notes.filter { note ->
@@ -76,8 +76,9 @@ fun NotesListScreen(
                 true
             } else {
                 note.title.contains(q, ignoreCase = true) ||
+                        note.folder.contains(q, ignoreCase = true) ||
                         note.preview.contains(q, ignoreCase = true) ||
-                        note.folder.contains(q, ignoreCase = true)
+                        note.text.contains(q, ignoreCase = true)
             }
             matchesFolder && matchesFilter && matchesSearch
         }

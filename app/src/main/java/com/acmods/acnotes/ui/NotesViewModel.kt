@@ -131,9 +131,22 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
             val dateStr = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date(now))
             val finalId = id ?: now
 
+            val derivedTitle = if (title.isNotBlank()) {
+                title.trim()
+            } else {
+                val firstLine = text.trim().lines().firstOrNull { it.isNotBlank() }
+                    ?.trimStart('#', ' ', '-', '*', '>')
+                    ?.trim() ?: ""
+                if (firstLine.isNotBlank()) {
+                    if (firstLine.length > 40) firstLine.substring(0, 40) + "…" else firstLine
+                } else {
+                    "Untitled Note"
+                }
+            }
+
             val note = Note(
                 id = finalId,
-                title = if (title.isNotBlank()) title.trim() else "Untitled Note",
+                title = derivedTitle,
                 text = text.trim(),
                 preview = com.acmods.acnotes.data.extractPreview(text.trim()),
                 folder = folder.trim(),
@@ -177,17 +190,28 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleTaskInNote(noteId: Long, lineIndex: Int, isChecked: Boolean) {
+    fun toggleTaskInNote(noteId: Long, taskIndex: Int, isChecked: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             val note = dbHelper.getNote(noteId) ?: return@launch
             val lines = note.text.lines().toMutableList()
-            if (lineIndex in 0 until lines.size) {
-                val line = lines[lineIndex]
-                val updatedLine = if (isChecked) {
-                    line.replace(Regex("\\[ \\]"), "[x]")
-                } else {
-                    line.replace(Regex("\\[[xX]\\]"), "[ ]")
+            var currentTaskIdx = 0
+            var modified = false
+            for (i in lines.indices) {
+                val line = lines[i]
+                if (line.trimStart().matches(Regex("^[-*+]\\s*\\[[ xX]\\].*"))) {
+                    if (currentTaskIdx == taskIndex) {
+                        lines[i] = if (isChecked) {
+                            line.replaceFirst(Regex("\\[ \\]"), "[x]")
+                        } else {
+                            line.replaceFirst(Regex("\\[[xX]\\]"), "[ ]")
+                        }
+                        modified = true
+                        break
+                    }
+                    currentTaskIdx++
                 }
+            }
+            if (modified) {
                 val updatedText = lines.joinToString("\n")
                 val updatedNote = note.copy(
                     text = updatedText,

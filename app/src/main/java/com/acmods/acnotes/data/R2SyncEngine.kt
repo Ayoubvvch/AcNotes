@@ -18,17 +18,22 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.xml.parsers.DocumentBuilderFactory
 
+object R2Config {
+    var endpointHost: String = "5d0d1d468b161e84470798a691e7b5b9.r2.cloudflarestorage.com"
+    var bucket: String = "my-vault"
+    var accessKey: String = "d1fc280a9699258034101a4df1da8d02"
+    var secretKey: String = "7869df9a17d82189529af41b026f01038bbf838e422d4d282c2c9aa8f13d08f1"
+    const val region: String = "auto"
+    const val service: String = "s3"
+
+    val baseUrl: String get() = "https://$endpointHost/$bucket"
+    val isConfigured: Boolean get() = accessKey.isNotBlank() && secretKey.isNotBlank() && endpointHost.isNotBlank()
+}
+
 class R2SyncEngine {
 
     companion object {
         private const val TAG = "R2SyncEngine"
-        private const val BUCKET = "my-vault"
-        private const val ENDPOINT_HOST = "5d0d1d468b161e84470798a691e7b5b9.r2.cloudflarestorage.com"
-        private const val BASE_URL = "https://$ENDPOINT_HOST/$BUCKET"
-        private const val ACCESS_KEY = "d1fc280a9699258034101a4df1da8d02"
-        private const val SECRET_KEY = "7869df9a17d82189529af41b026f01038bbf838e422d4d282c2c9aa8f13d08f1"
-        private const val REGION = "auto"
-        private const val SERVICE = "s3"
     }
 
     private val client = OkHttpClient.Builder()
@@ -168,6 +173,7 @@ class R2SyncEngine {
     }
 
     suspend fun putNote(note: Note): Boolean = withContext(Dispatchers.IO) {
+        if (!R2Config.isConfigured) return@withContext false
         try {
             val key = getNoteKey(note)
             val encodedKey = encodeKeyForUrl(key)
@@ -175,20 +181,20 @@ class R2SyncEngine {
             val date = getAmzDate()
             val shortDate = getShortDate()
 
-            val url = "$BASE_URL/$encodedKey"
+            val url = "${R2Config.baseUrl}/$encodedKey"
             val body = content.toByteArray(Charsets.UTF_8)
             val payloadHash = sha256Hex(body)
 
-            val canonicalHeaders = "host:$ENDPOINT_HOST\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val canonicalHeaders = "host:${R2Config.endpointHost}\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
             val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-            val canonicalRequest = "PUT\n/$BUCKET/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "PUT\n/${R2Config.bucket}/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
 
             val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
 
             val request = Request.Builder()
                 .url(url)
                 .put(body.toRequestBody("text/markdown; charset=utf-8".toMediaType()))
-                .header("Host", ENDPOINT_HOST)
+                .header("Host", R2Config.endpointHost)
                 .header("x-amz-date", date)
                 .header("x-amz-content-sha256", payloadHash)
                 .header("Authorization", auth)
@@ -204,22 +210,23 @@ class R2SyncEngine {
     }
 
     suspend fun deleteKeyRemote(key: String): Boolean = withContext(Dispatchers.IO) {
+        if (!R2Config.isConfigured) return@withContext false
         try {
             val encodedKey = encodeKeyForUrl(key)
             val date = getAmzDate()
             val shortDate = getShortDate()
             val payloadHash = sha256Hex(ByteArray(0))
 
-            val canonicalHeaders = "host:$ENDPOINT_HOST\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val canonicalHeaders = "host:${R2Config.endpointHost}\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
             val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-            val canonicalRequest = "DELETE\n/$BUCKET/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "DELETE\n/${R2Config.bucket}/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
 
             val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
 
             val request = Request.Builder()
-                .url("$BASE_URL/$encodedKey")
+                .url("${R2Config.baseUrl}/$encodedKey")
                 .delete()
-                .header("Host", ENDPOINT_HOST)
+                .header("Host", R2Config.endpointHost)
                 .header("x-amz-date", date)
                 .header("x-amz-content-sha256", payloadHash)
                 .header("Authorization", auth)
@@ -238,23 +245,24 @@ class R2SyncEngine {
         deleteKeyRemote(key)
     }
 
-    private fun listVaultKeys(): List<String>? {
+    private data class ListVaultResult(val keys: List<String>, val isTruncated: Boolean, val nextMarker: String?)
+
+    private fun fetchVaultPage(query: String): ListVaultResult? {
         return try {
-            val query = "prefix=.Vault%2F"
             val date = getAmzDate()
             val shortDate = getShortDate()
             val payloadHash = sha256Hex(ByteArray(0))
 
-            val canonicalHeaders = "host:$ENDPOINT_HOST\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val canonicalHeaders = "host:${R2Config.endpointHost}\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
             val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-            val canonicalRequest = "GET\n/$BUCKET\n$query\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "GET\n/${R2Config.bucket}\n$query\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
 
             val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
 
             val request = Request.Builder()
-                .url("$BASE_URL?$query")
+                .url("${R2Config.baseUrl}?$query")
                 .get()
-                .header("Host", ENDPOINT_HOST)
+                .header("Host", R2Config.endpointHost)
                 .header("x-amz-date", date)
                 .header("x-amz-content-sha256", payloadHash)
                 .header("Authorization", auth)
@@ -263,31 +271,59 @@ class R2SyncEngine {
             client.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) return null
                 val xml = resp.body?.string() ?: return null
-                parseKeysFromXml(xml)
+                parseListResultFromXml(xml)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "listVaultKeys error: ${e.message}")
+            Log.w(TAG, "fetchVaultPage error: ${e.message}")
             null
         }
     }
 
+    private fun listVaultKeys(): List<String>? {
+        if (!R2Config.isConfigured) return null
+        val allKeys = mutableListOf<String>()
+        var marker: String? = null
+        var iterations = 0
+        val maxIterations = 50 // Safeguard up to 50,000 files
+
+        do {
+            val query = if (marker.isNullOrBlank()) {
+                "prefix=.Vault%2F"
+            } else {
+                "marker=" + URLEncoder.encode(marker, "UTF-8").replace("+", "%20") + "&prefix=.Vault%2F"
+            }
+            val result = fetchVaultPage(query) ?: return if (allKeys.isEmpty()) null else allKeys
+            allKeys.addAll(result.keys)
+
+            marker = if (result.isTruncated && result.keys.isNotEmpty()) {
+                result.nextMarker ?: result.keys.lastOrNull()
+            } else {
+                null
+            }
+            iterations++
+        } while (marker != null && iterations < maxIterations)
+
+        return allKeys
+    }
+
     private fun getObject(key: String): String? {
+        if (!R2Config.isConfigured) return null
         return try {
             val encodedKey = encodeKeyForUrl(key)
             val date = getAmzDate()
             val shortDate = getShortDate()
             val payloadHash = sha256Hex(ByteArray(0))
 
-            val canonicalHeaders = "host:$ENDPOINT_HOST\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val canonicalHeaders = "host:${R2Config.endpointHost}\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
             val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-            val canonicalRequest = "GET\n/$BUCKET/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "GET\n/${R2Config.bucket}/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
 
             val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
 
             val request = Request.Builder()
-                .url("$BASE_URL/$encodedKey")
+                .url("${R2Config.baseUrl}/$encodedKey")
                 .get()
-                .header("Host", ENDPOINT_HOST)
+                .header("Host", R2Config.endpointHost)
                 .header("x-amz-date", date)
                 .header("x-amz-content-sha256", payloadHash)
                 .header("Authorization", auth)
@@ -302,12 +338,25 @@ class R2SyncEngine {
         }
     }
 
-    private fun parseKeysFromXml(xml: String): List<String> {
+    private fun parseListResultFromXml(xml: String): ListVaultResult {
         val keys = mutableListOf<String>()
+        var isTruncated = false
+        var nextMarker: String? = null
         try {
             val factory = DocumentBuilderFactory.newInstance()
             val builder = factory.newDocumentBuilder()
             val doc = builder.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
+
+            val truncNodes = doc.getElementsByTagName("IsTruncated")
+            if (truncNodes.length > 0) {
+                isTruncated = truncNodes.item(0).textContent.trim().equals("true", ignoreCase = true)
+            }
+
+            val markerNodes = doc.getElementsByTagName("NextMarker")
+            if (markerNodes.length > 0) {
+                nextMarker = markerNodes.item(0).textContent.trim()
+            }
+
             val keyNodes = doc.getElementsByTagName("Key")
             for (i in 0 until keyNodes.length) {
                 keys.add(keyNodes.item(i).textContent)
@@ -315,7 +364,7 @@ class R2SyncEngine {
         } catch (e: Exception) {
             Log.w(TAG, "XML parse error: ${e.message}")
         }
-        return keys
+        return ListVaultResult(keys, isTruncated, nextMarker)
     }
 
     private fun getNoteKey(note: Note): String {
@@ -401,10 +450,10 @@ class R2SyncEngine {
     }
 
     private fun buildAuthHeader(canonicalRequest: String, shortDate: String, amzDate: String, signedHeaders: String): String {
-        val stringToSign = "AWS4-HMAC-SHA256\n$amzDate\n$shortDate/$REGION/$SERVICE/aws4_request\n${sha256Hex(canonicalRequest.toByteArray(Charsets.UTF_8))}"
-        val signingKey = getSignatureKey(SECRET_KEY, shortDate, REGION, SERVICE)
+        val stringToSign = "AWS4-HMAC-SHA256\n$amzDate\n$shortDate/${R2Config.region}/${R2Config.service}/aws4_request\n${sha256Hex(canonicalRequest.toByteArray(Charsets.UTF_8))}"
+        val signingKey = getSignatureKey(R2Config.secretKey, shortDate, R2Config.region, R2Config.service)
         val signature = hmacSha256Hex(signingKey, stringToSign)
-        return "AWS4-HMAC-SHA256 Credential=$ACCESS_KEY/$shortDate/$REGION/$SERVICE/aws4_request, SignedHeaders=$signedHeaders, Signature=$signature"
+        return "AWS4-HMAC-SHA256 Credential=${R2Config.accessKey}/$shortDate/${R2Config.region}/${R2Config.service}/aws4_request, SignedHeaders=$signedHeaders, Signature=$signature"
     }
 
     private fun getSignatureKey(key: String, dateStamp: String, regionName: String, serviceName: String): ByteArray {

@@ -103,6 +103,8 @@ img { max-width: 100%; border-radius: 12px; margin: 1em 0; }
 
 <script>
 function renderMarkdownWithMath(raw) {
+    var savedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+
     if (!raw) {
         document.getElementById('content').innerHTML = '<p style="color:#71717a;font-style:italic">Empty note.</p>';
         return;
@@ -141,14 +143,15 @@ function renderMarkdownWithMath(raw) {
         if (checkbox) {
             li.classList.add('task-item');
             checkbox.removeAttribute('disabled');
-            checkbox.setAttribute('data-line-index', taskIdx++);
+            var thisTaskIdx = taskIdx++;
+            checkbox.setAttribute('data-line-index', thisTaskIdx);
             if (checkbox.checked) li.classList.add('task-done');
 
             checkbox.onchange = function() {
                 if (checkbox.checked) li.classList.add('task-done');
                 else li.classList.remove('task-done');
                 if (window.AndroidBridge && window.AndroidBridge.toggleTask) {
-                    window.AndroidBridge.toggleTask(parseInt(checkbox.getAttribute('data-line-index'), 10), checkbox.checked);
+                    window.AndroidBridge.toggleTask(thisTaskIdx, checkbox.checked);
                 }
             };
         }
@@ -164,6 +167,13 @@ function renderMarkdownWithMath(raw) {
                 {left: '\\(', right: '\\)', display: false}
             ],
             throwOnError: false
+        });
+    }
+
+    // Step 7: Smooth scroll restoration
+    if (savedScrollY > 0) {
+        requestAnimationFrame(function() {
+            window.scrollTo(0, savedScrollY);
         });
     }
 }

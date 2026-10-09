@@ -33,33 +33,39 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.4.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-output/AcNotes-v2.5.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AcNotes-v2.4.0-APK
-          path: release-output/AcNotes-v2.4.0.apk
+          name: AcNotes-v2.5.0-APK
+          path: release-output/AcNotes-v2.5.0.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v2.4.0
-          name: "AcNotes v2.4.0 - Ultra Smooth Motion & Physics Transitions"
+          tag_name: v2.5.0
+          name: "AcNotes v2.5.0 - Ultimate 100% Raw, Fast & Clean Release"
           body: |
-            ### ✨ AcNotes v2.4.0 - Ultra Smooth Motion & Native Physics Edition
+            ### 🚀 AcNotes v2.5.0 - 100% Raw, Fast, Great & Clean Update
 
-            - **Seamless Predictive Screen Transitions:**
-              - Parallax slide & fade navigation when opening, editing, and closing notes.
-              - Predictive backward sliding and header drag-back gesture.
-            - **Tactile Physics Feedback:**
-              - Physical scale-spring compression on card touches with zero dropped frames.
-            - **Hardware-Accelerated WebView & GPU Layer Promotion:**
-              - Enabled hardware layer (`LAYER_TYPE_HARDWARE`) and `offscreenPreRaster` in reader WebView.
-              - Deduplicated JavaScript markdown parsing to prevent animation jank.
-              - Promoted reader to dedicated GPU composite layer (`translateZ(0)`) with `content-visibility: auto` for instant 120 FPS scrolling through 20,000+ word notes.
-          files: release-output/AcNotes-v2.4.0.apk
+            - ⚡ **True Full-Text Search:** Instant in-memory search across note titles, folders, previews, and full body content.
+            - ✍️ **Enhanced Writing Engine:**
+              - Smart list & task continuation: hitting Enter on `- [ ] ` or `- ` automatically continues the list. Hitting Enter on an empty marker cleanly cancels it.
+              - Smart headings: `H1` and `H2` insert directly at the beginning of the current line.
+              - Dedicated LaTeX Math formatting chips (`∑ Math` and `x² Math`).
+              - Bulletproof Auto-Save: Navigating back or using Android system back gestures automatically saves the note.
+            - 📖 **Seamless Reading Experience:**
+              - Fixed interactive checklist synchronization: toggling tasks in reading mode updates the exact task without jumping or desync.
+              - Smooth scroll restoration when interacting with note content.
+            - ☁️ **Robust Cloudflare R2 Sync Engine:**
+              - Complete S3 Pagination support for 1,000+ notes without data truncation.
+              - Protected local notes against partial network drops.
+            - 🧹 **Pure Native Cleanup:**
+              - Removed 300+ lines of dead code.
+              - Streamlined database and architecture.
+          files: release-output/AcNotes-v2.5.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
