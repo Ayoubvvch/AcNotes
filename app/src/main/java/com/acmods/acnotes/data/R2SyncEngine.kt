@@ -309,10 +309,7 @@ class R2SyncEngine {
 
     private fun listVaultKeys(): List<String>? {
         if (!R2Config.isConfigured) return null
-        val vaultKeys = listKeysWithPrefix(".Vault%2F")
-        val lowerVaultKeys = listKeysWithPrefix(".vault%2F")
-        val acNotesKeys = listKeysWithPrefix(".AcNotes%2F")
-        return (vaultKeys + lowerVaultKeys + acNotesKeys).distinct()
+        return listKeysWithPrefix(".Vault%2F")
     }
 
     private fun getObject(key: String): String? {
@@ -383,10 +380,7 @@ class R2SyncEngine {
     suspend fun fetchRemoteProfile(): UserProfile? = withContext(Dispatchers.IO) {
         if (!R2Config.isConfigured) return@withContext null
         try {
-            val raw = getObject(".Vault/.profile.json")
-                ?: getObject(".vault/.profile.json")
-                ?: getObject(".AcNotes/.profile.json")
-                ?: return@withContext null
+            val raw = getObject(".Vault/.profile.json") ?: return@withContext null
             val json = org.json.JSONObject(raw)
             UserProfile(
                 name = json.optString("name", ""),
@@ -638,9 +632,7 @@ class R2SyncEngine {
 
     suspend fun downloadAvatar(destFile: java.io.File): Boolean = withContext(Dispatchers.IO) {
         if (!R2Config.isConfigured) return@withContext false
-        if (downloadFileByKey(".Vault/.profile_avatar.jpg", destFile)) return@withContext true
-        if (downloadFileByKey(".vault/.profile_avatar.jpg", destFile)) return@withContext true
-        downloadFileByKey(".AcNotes/.profile_avatar.jpg", destFile)
+        downloadFileByKey(".Vault/.profile_avatar.jpg", destFile)
     }
 
     private fun parseListResultFromXml(xml: String): ListVaultResult {
@@ -682,9 +674,9 @@ class R2SyncEngine {
         var baseName = (if (note.title.isNotBlank()) note.title else "Untitled")
             .replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
 
-        // Reuse existing syncKey only if it already belongs to .Vault (or .vault) and folder & title haven't changed
+        // Reuse existing syncKey only if it already belongs to .Vault and folder & title haven't changed
         note.syncKey?.let { currentKey ->
-            if (currentKey.startsWith(".Vault/") || currentKey.startsWith(".vault/")) {
+            if (currentKey.startsWith(".Vault/")) {
                 val parts = currentKey.split("/").filter { it.isNotBlank() }
                 val curFolder = if (parts.size > 2) parts.subList(1, parts.size - 1).joinToString("/") else ""
                 val curBase = parts.lastOrNull()?.removeSuffix(".md") ?: ""

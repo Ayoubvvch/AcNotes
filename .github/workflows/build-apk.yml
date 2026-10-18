@@ -33,34 +33,33 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.3.0.apk
+          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.4.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-            name: AcNotes-v3.3.0-Signed-APK
-            path: release-output/AcNotes-v3.3.0.apk
+            name: AcNotes-v3.4.0-Signed-APK
+            path: release-output/AcNotes-v3.4.0.apk
             if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-            tag_name: v3.3.0
-            name: "AcNotes v3.3.0 - System Share Sheet Import, Multi-File Drive Upload & .Vault Storage"
+            tag_name: v3.4.0
+            name: "AcNotes v3.4.0 - Instant Direct Share to Home & Pure .Vault Storage"
             body: |
-              ### 🚀 AcNotes v3.3.0 - System Share Sheet Import, Multi-File Drive Upload & .Vault Storage
+              ### 🚀 AcNotes v3.4.0 - Instant Direct Share to Home & Pure .Vault Storage
 
-              - 📤 **Android System Share Sheet Integration:**
-                - AcNotes now appears in the system Share Sheet across all apps (Google Drive, Chrome, WhatsApp, Telegram, Files, etc.).
-              - 📑 **Single & Multi-File Upload Support:**
-                - Share single or multiple markdown files, text files, code, or images directly into AcNotes with one tap.
-              - 📁 **Interactive "Upload to Vault" Modal:**
-                - Preview all incoming items, choose the destination folder (Home or any custom folder, or create a new folder on the spot), and tap **"Upload Here"**.
-              - ☁️ **Full .Vault Root Storage:**
-                - Reverted root storage fully to `.Vault/` across all notes, subfolders, profile, and avatar with complete backward compatibility.
+              - 📥 **Instant Direct Share to Home:**
+                - Share any `.md`, `.txt`, text, or document directly from other apps (Google Drive, Files, Chrome, WhatsApp) into AcNotes.
+                - Automatically saved straight to **Home** (`folder = ""`) without dialog interruptions, followed by immediate background sync to Cloudflare R2.
+              - 📑 **Multi-Item Batch Share:**
+                - Select and share multiple files at once; all items are processed into Home and synchronized together.
+              - ☁️ **Pure `.Vault` Architecture (100% Web App Alignment):**
+                - Completely purged all `.AcNotes` paths. The app now operates exclusively on `.Vault/`, working as a true twin brother to the desktop web app (`index.html`).
               - 🔐 **Cryptographically Signed APK (In-Place Updates):**
-                - Retains release key signature for seamless in-place installation over existing releases.
-            files: release-output/AcNotes-v3.3.0.apk
+                - Retains release keystore signature for direct seamless in-place updating over previous builds.
+            files: release-output/AcNotes-v3.4.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

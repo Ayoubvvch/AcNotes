@@ -94,13 +94,6 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     private val _updateState = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
     val updateState: StateFlow<UpdateUiState> = _updateState.asStateFlow()
 
-    private val _incomingShareItems = MutableStateFlow<List<IncomingShareItem>?>(null)
-    val incomingShareItems: StateFlow<List<IncomingShareItem>?> = _incomingShareItems.asStateFlow()
-
-    fun dismissIncomingShare() {
-        _incomingShareItems.value = null
-    }
-
     init {
         R2Config.init(application)
         _userProfile.value = UserProfileManager.load(application)
@@ -240,7 +233,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         periodicSyncJob?.cancel()
     }
 
-    fun checkForUpdates(currentVersion: String = "3.3.0") {
+    fun checkForUpdates(currentVersion: String = "3.4.0") {
         viewModelScope.launch {
             _updateState.value = UpdateUiState.Checking
             val result = AppUpdater.checkForUpdate(currentVersion)
@@ -610,8 +603,54 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (items.isNotEmpty()) {
+                val today = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date())
+                val newNotes = mutableListOf<Note>()
+
+                items.forEachIndexed { index, item ->
+                    val baseTitle = item.displayName
+                        .removeSuffix(".md")
+                        .removeSuffix(".markdown")
+                        .removeSuffix(".txt")
+                        .trim()
+                    val title = if (baseTitle.isNotBlank()) baseTitle else "Shared Note"
+                    val text = item.textContent ?: ""
+                    val id = System.currentTimeMillis() + index
+
+                    val note = Note(
+                        id = id,
+                        title = title,
+                        text = text,
+                        preview = extractPreview(text),
+                        folder = "", // Directly into Home!
+                        date = today,
+                        updatedAt = id,
+                        isPinned = false,
+                        syncKey = null
+                    )
+                    newNotes.add(note)
+                }
+
+                dbHelper.saveAll(newNotes)
+                loadData()
+
+                // Switch to Home screen
                 _screen.value = Screen.List
-                _incomingShareItems.value = items
+                _selectedFolder.value = ""
+
+                // Show feedback Toast on main thread
+                withContext(Dispatchers.Main) {
+                    val msg = if (newNotes.size == 1) {
+                        "📥 Saved \"${newNotes[0].title}\" to Home & Syncing..."
+                    } else {
+                        "📥 Saved ${newNotes.size} notes to Home & Syncing..."
+                    }
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                }
+
+                // Sync directly to .Vault on Cloudflare R2!
+                if (R2Config.isCloudConnected) {
+                    syncNow()
+                }
             }
         }
     }
@@ -669,55 +708,6 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             Log.w("NotesViewModel", "resolveItemFromUri error: ${e.message}")
             null
-        }
-    }
-
-    fun uploadSharedNotes(targetFolder: String) {
-        val items = _incomingShareItems.value ?: return
-        viewModelScope.launch(Dispatchers.IO) {
-            val cleanFolder = if (targetFolder.isBlank() || targetFolder.equals("Home", ignoreCase = true)) "" else targetFolder.trim()
-            if (cleanFolder.isNotEmpty()) {
-                dbHelper.addFolder(cleanFolder)
-            }
-
-            val today = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date())
-            val newNotes = mutableListOf<Note>()
-
-            items.forEachIndexed { index, item ->
-                val baseTitle = item.displayName
-                    .removeSuffix(".md")
-                    .removeSuffix(".markdown")
-                    .removeSuffix(".txt")
-                    .trim()
-                val title = if (baseTitle.isNotBlank()) baseTitle else "Shared Note"
-                val text = item.textContent ?: ""
-                val id = System.currentTimeMillis() + index
-
-                val note = Note(
-                    id = id,
-                    title = title,
-                    text = text,
-                    preview = extractPreview(text),
-                    folder = cleanFolder,
-                    date = today,
-                    updatedAt = id,
-                    isPinned = false,
-                    syncKey = null
-                )
-                newNotes.add(note)
-            }
-
-            dbHelper.saveAll(newNotes)
-            loadData()
-            _incomingShareItems.value = null
-
-            // Switch to destination folder view
-            _selectedFolder.value = if (cleanFolder.isEmpty()) "Home" else cleanFolder
-
-            // Sync immediately to Cloud Vault
-            if (R2Config.isCloudConnected) {
-                syncNow()
-            }
         }
     }
 }
