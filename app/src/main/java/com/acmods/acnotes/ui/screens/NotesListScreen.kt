@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
@@ -114,6 +115,8 @@ fun NotesListScreen(
     var hasDiscoveredBuckets by remember { mutableStateOf(false) }
     var isCreatingNewBucket by remember { mutableStateOf(false) }
     var newBucketInput by remember { mutableStateOf("") }
+    var isEditingProfileName by remember { mutableStateOf(false) }
+    var editingNameValue by remember { mutableStateOf("") }
 
     val isHome = selectedFolder.isBlank() || selectedFolder.equals("home", ignoreCase = true)
 
@@ -636,9 +639,13 @@ fun NotesListScreen(
     }
 
     // Modal: Universal Onboarding / Sign In / Sign Up / Work Offline
-    if (!isInitialSetupDone) {
+    if (!isInitialSetupDone || authMode != null) {
         AlertDialog(
-            onDismissRequest = { /* Must choose an option on first launch */ },
+            onDismissRequest = {
+                if (isInitialSetupDone) {
+                    authMode = null
+                }
+            },
             title = {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1195,6 +1202,8 @@ fun NotesListScreen(
                                     if (success) {
                                         if (userProfile.name.isBlank()) {
                                             authMode = "ask_name"
+                                        } else {
+                                            authMode = null
                                         }
                                     } else {
                                         authErrorMessage = msg
@@ -1262,6 +1271,7 @@ fun NotesListScreen(
                                     isVerifyingAuth = false
                                     if (success) {
                                         viewModel.updateProfile(authName, authEmoji)
+                                        authMode = null
                                     } else {
                                         authErrorMessage = msg
                                     }
@@ -1294,7 +1304,11 @@ fun NotesListScreen(
             dismissButton = {
                 if (authMode != null && authMode != "ask_name") {
                     TextButton(onClick = { authMode = null }) {
-                        Text("← Back", color = TextSecondary)
+                        Text(if (isInitialSetupDone) "Cancel" else "← Back", color = TextSecondary)
+                    }
+                } else if (isInitialSetupDone) {
+                    TextButton(onClick = { authMode = null }) {
+                        Text("Cancel", color = TextSecondary)
                     }
                 }
             },
@@ -1365,23 +1379,79 @@ fun NotesListScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (userProfile.name.isNotBlank()) userProfile.name else "AcNotes User",
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
-                                )
-                                Text(
-                                    text = if (isCloudConnected) "Cloud: ${R2Config.bucket}" else "Mode: Offline (Local Storage)",
-                                    color = TextMuted,
-                                    fontSize = 11.sp
-                                )
+                                if (isEditingProfileName) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        OutlinedTextField(
+                                            value = editingNameValue,
+                                            onValueChange = { editingNameValue = it },
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f),
+                                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = TextPrimary),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = EmeraldPrimary,
+                                                unfocusedBorderColor = SurfaceBorder,
+                                                focusedTextColor = TextPrimary,
+                                                unfocusedTextColor = TextPrimary,
+                                                cursorColor = EmeraldPrimary
+                                            )
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                val clean = editingNameValue.trim()
+                                                if (clean.isNotBlank()) {
+                                                    viewModel.updateProfile(clean, userProfile.avatarEmoji)
+                                                }
+                                                isEditingProfileName = false
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(Icons.Default.Check, contentDescription = "Save", tint = EmeraldPrimary, modifier = Modifier.size(18.dp))
+                                        }
+                                        IconButton(
+                                            onClick = { isEditingProfileName = false },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = TextMuted, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                } else {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (userProfile.name.isNotBlank()) userProfile.name else "AcNotes User",
+                                            color = TextPrimary,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                editingNameValue = if (userProfile.name.isNotBlank()) userProfile.name else ""
+                                                isEditingProfileName = true
+                                            },
+                                            modifier = Modifier.size(28.dp).padding(start = 4.dp)
+                                        ) {
+                                            Icon(Icons.Default.Edit, contentDescription = "Edit Name", tint = TextMuted, modifier = Modifier.size(15.dp))
+                                        }
+                                    }
+                                    Text(
+                                        text = if (isCloudConnected) "Cloud: ${R2Config.bucket}" else "Mode: Offline (Local Storage)",
+                                        color = TextMuted,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
-                            IconButton(
-                                onClick = { galleryLauncher.launch("image/*") },
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Icon(Icons.Default.PhotoCamera, contentDescription = "Change Photo", tint = EmeraldLight, modifier = Modifier.size(18.dp))
+                            if (!isEditingProfileName) {
+                                IconButton(
+                                    onClick = { galleryLauncher.launch("image/*") },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(Icons.Default.PhotoCamera, contentDescription = "Change Photo", tint = EmeraldLight, modifier = Modifier.size(18.dp))
+                                }
                             }
                         }
                     }
@@ -1481,11 +1551,11 @@ fun NotesListScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text("AcNotes App", color = TextPrimary, fontSize = 13.sp)
-                                        Text("v3.2.1", color = TextMuted, fontSize = 12.sp)
+                                        Text("v3.2.2", color = TextMuted, fontSize = 12.sp)
                                     }
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Button(
-                                        onClick = { viewModel.checkForUpdates("3.2.1") },
+                                        onClick = { viewModel.checkForUpdates("3.2.2") },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = EmeraldPrimary,
                                             contentColor = BgDark
@@ -1583,7 +1653,7 @@ fun NotesListScreen(
                                     Column {
                                         Text(text = "Update error: ${state.message}", color = RedDelete, fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        TextButton(onClick = { viewModel.checkForUpdates("3.1.0") }) {
+                                        TextButton(onClick = { viewModel.checkForUpdates("3.2.2") }) {
                                             Text("Retry", color = EmeraldPrimary)
                                         }
                                     }

@@ -281,8 +281,7 @@ class R2SyncEngine {
         }
     }
 
-    private fun listVaultKeys(): List<String>? {
-        if (!R2Config.isConfigured) return null
+    private fun listKeysWithPrefix(prefixEncoded: String): List<String> {
         val allKeys = mutableListOf<String>()
         var marker: String? = null
         var iterations = 0
@@ -290,11 +289,11 @@ class R2SyncEngine {
 
         do {
             val query = if (marker.isNullOrBlank()) {
-                "prefix=.Vault%2F"
+                "prefix=$prefixEncoded"
             } else {
-                "marker=" + URLEncoder.encode(marker, "UTF-8").replace("+", "%20") + "&prefix=.Vault%2F"
+                "marker=" + URLEncoder.encode(marker, "UTF-8").replace("+", "%20") + "&prefix=$prefixEncoded"
             }
-            val result = fetchVaultPage(query) ?: return if (allKeys.isEmpty()) null else allKeys
+            val result = fetchVaultPage(query) ?: break
             allKeys.addAll(result.keys)
 
             marker = if (result.isTruncated && result.keys.isNotEmpty()) {
@@ -306,6 +305,14 @@ class R2SyncEngine {
         } while (marker != null && iterations < maxIterations)
 
         return allKeys
+    }
+
+    private fun listVaultKeys(): List<String>? {
+        if (!R2Config.isConfigured) return null
+        val acNotesKeys = listKeysWithPrefix(".AcNotes%2F")
+        val legacyVaultKeys = listKeysWithPrefix(".Vault%2F")
+        val combined = (acNotesKeys + legacyVaultKeys).distinct()
+        return combined
     }
 
     private fun getObject(key: String): String? {
@@ -376,7 +383,7 @@ class R2SyncEngine {
     suspend fun fetchRemoteProfile(): UserProfile? = withContext(Dispatchers.IO) {
         if (!R2Config.isConfigured) return@withContext null
         try {
-            val raw = getObject(".Vault/.profile.json") ?: return@withContext null
+            val raw = getObject(".AcNotes/.profile.json") ?: getObject(".Vault/.profile.json") ?: return@withContext null
             val json = org.json.JSONObject(raw)
             UserProfile(
                 name = json.optString("name", ""),
@@ -397,7 +404,7 @@ class R2SyncEngine {
                 put("avatarEmoji", profile.avatarEmoji)
                 put("updatedAt", System.currentTimeMillis())
             }
-            putObject(".Vault/.profile.json", json.toString(), "application/json")
+            putObject(".AcNotes/.profile.json", json.toString(), "application/json")
         } catch (e: Exception) {
             false
         }
@@ -558,7 +565,7 @@ class R2SyncEngine {
     suspend fun uploadAvatar(file: java.io.File): Boolean = withContext(Dispatchers.IO) {
         if (!R2Config.isConfigured || !file.exists()) return@withContext false
         try {
-            val key = ".Vault/.profile_avatar.jpg"
+            val key = ".AcNotes/.profile_avatar.jpg"
             val encodedKey = encodeKeyForUrl(key)
             val date = getAmzDate()
             val shortDate = getShortDate()
@@ -589,10 +596,8 @@ class R2SyncEngine {
         }
     }
 
-    suspend fun downloadAvatar(destFile: java.io.File): Boolean = withContext(Dispatchers.IO) {
-        if (!R2Config.isConfigured) return@withContext false
-        try {
-            val key = ".Vault/.profile_avatar.jpg"
+    private fun downloadFileByKey(key: String, destFile: java.io.File): Boolean {
+        return try {
             val encodedKey = encodeKeyForUrl(key)
             val date = getAmzDate()
             val shortDate = getShortDate()
@@ -623,9 +628,15 @@ class R2SyncEngine {
                 } else false
             }
         } catch (e: Exception) {
-            Log.w(TAG, "downloadAvatar error: ${e.message}")
+            Log.w(TAG, "downloadAvatar error for $key: ${e.message}")
             false
         }
+    }
+
+    suspend fun downloadAvatar(destFile: java.io.File): Boolean = withContext(Dispatchers.IO) {
+        if (!R2Config.isConfigured) return@withContext false
+        if (downloadFileByKey(".AcNotes/.profile_avatar.jpg", destFile)) return@withContext true
+        downloadFileByKey(".Vault/.profile_avatar.jpg", destFile)
     }
 
     private fun parseListResultFromXml(xml: String): ListVaultResult {
@@ -663,17 +674,19 @@ class R2SyncEngine {
         } else {
             ""
         }
-        val folderPath = if (targetFolder.isNotEmpty()) ".Vault/$targetFolder" else ".Vault"
+        val folderPath = if (targetFolder.isNotEmpty()) ".AcNotes/$targetFolder" else ".AcNotes"
         var baseName = (if (note.title.isNotBlank()) note.title else "Untitled")
             .replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
 
-        // Reuse existing syncKey if folder and title haven't changed
+        // Reuse existing syncKey only if it already belongs to .AcNotes and folder & title haven't changed
         note.syncKey?.let { currentKey ->
-            val parts = currentKey.split("/").filter { it.isNotBlank() }
-            val curFolder = if (parts.size > 2) parts.subList(1, parts.size - 1).joinToString("/") else ""
-            val curBase = parts.lastOrNull()?.removeSuffix(".md") ?: ""
-            if (curFolder == targetFolder && (curBase == baseName || curBase.startsWith("${baseName}_"))) {
-                return currentKey
+            if (currentKey.startsWith(".AcNotes/")) {
+                val parts = currentKey.split("/").filter { it.isNotBlank() }
+                val curFolder = if (parts.size > 2) parts.subList(1, parts.size - 1).joinToString("/") else ""
+                val curBase = parts.lastOrNull()?.removeSuffix(".md") ?: ""
+                if (curFolder == targetFolder && (curBase == baseName || curBase.startsWith("${baseName}_"))) {
+                    return currentKey
+                }
             }
         }
 

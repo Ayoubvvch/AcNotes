@@ -33,36 +33,34 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.2.1.apk
+          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.2.2.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-            name: AcNotes-v3.2.1-Signed-APK
-            path: release-output/AcNotes-v3.2.1.apk
+            name: AcNotes-v3.2.2-Signed-APK
+            path: release-output/AcNotes-v3.2.2.apk
             if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-            tag_name: v3.2.1
-            name: "AcNotes v3.2.1 - Smart Bucket Auto-Discovery & Gallery Profile Avatars"
+            tag_name: v3.2.2
+            name: "AcNotes v3.2.2 - Hidden .AcNotes Folder, Offline Connect & Profile Name Editor"
             body: |
-              ### 🚀 AcNotes v3.2.1 - Smart Bucket Auto-Discovery & Gallery Profile Avatars
+              ### 🚀 AcNotes v3.2.2 - Hidden .AcNotes Folder, Offline Connect & Profile Name Editor
 
-              - ⚡ **Fixed HTTP 403 Forbidden on Connect:**
-                - Canonical SigV4 request corrected for S3 bucket connection verification on Cloudflare R2.
-              - 🔍 **Smart S3 Bucket Auto-Discovery (No Manual Bucket Typing):**
-                - Connect effortlessly using only your Account ID, Access Key ID, and Secret Key. AcNotes automatically detects and presents existing buckets (e.g., `my-vault`) as selectable chips with 1-tap selection, plus instant "+ Create New Bucket" support.
-              - 📸 **Gallery Profile Picture Picker:**
-                - Pick and crop your avatar directly from your device Gallery (`image/*`). Avatars are saved locally and synced to your cloud vault (`.Vault/.profile_avatar.jpg`).
-              - 🖼️ **Dynamic Avatar Rendering:**
-                - Clean, circular avatar displays across the Top App Bar, Sign Up modal, and Account Settings modal.
-              - 🔄 **In-App Updater Ready:**
-                - Check for updates and download signed APKs directly within the app.
+              - 📁 **Organized Hidden Cloud Storage (`.AcNotes`):**
+                - All notes, subfolders, profile data (`.profile.json`), and custom gallery avatars (`.profile_avatar.jpg`) are now neatly housed inside a hidden root folder `.AcNotes/`.
+                - Fully backwards-compatible with existing notes and profiles in `.Vault/`.
+              - 🔌 **Seamless Offline-to-Cloud Connection:**
+                - Fixed unresponsive "Connect to Cloud Vault" button in Settings when operating in offline mode.
+                - Easily switch between offline mode and your Cloudflare R2 vault anytime.
+              - ✏️ **Editable Profile Name in Settings:**
+                - You can now edit your profile name directly inside Settings via the pencil icon, automatically updating both local storage and the cloud vault.
               - 🔐 **Cryptographically Signed APK (In-Place Updates):**
                 - Retains release key signature for seamless in-place installation over existing releases.
-            files: release-output/AcNotes-v3.2.1.apk
+            files: release-output/AcNotes-v3.2.2.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
