@@ -94,6 +94,49 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun fetchBucketsForAccount(
+        endpoint: String,
+        accessKey: String,
+        secretKey: String,
+        onResult: (Boolean, List<String>, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val (ok, buckets) = r2Sync.listBuckets(endpoint, accessKey, secretKey)
+            if (ok) {
+                onResult(true, buckets, "")
+            } else {
+                onResult(false, emptyList(), "Could not retrieve buckets. Please verify Account ID and API keys.")
+            }
+        }
+    }
+
+    fun createAndSelectBucket(
+        endpoint: String,
+        bucketName: String,
+        accessKey: String,
+        secretKey: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val (ok, msg) = r2Sync.createBucket(endpoint, bucketName, accessKey, secretKey)
+            onResult(ok, msg)
+        }
+    }
+
+    fun setProfileAvatarUri(uri: android.net.Uri) {
+        val path = UserProfileManager.saveAvatarFromUri(getApplication(), uri)
+        if (path != null) {
+            val p = _userProfile.value.copy(avatarImagePath = path)
+            _userProfile.value = p
+            UserProfileManager.save(getApplication(), p)
+            if (R2Config.isCloudConnected) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    r2Sync.uploadAvatar(java.io.File(path))
+                }
+            }
+        }
+    }
+
     fun connectCloudVault(
         endpoint: String,
         bucket: String,
@@ -120,6 +163,16 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                     if (remoteP != null && remoteP.name.isNotBlank()) {
                         _userProfile.value = remoteP
                         UserProfileManager.save(getApplication(), remoteP)
+                    }
+                }
+
+                // Sync avatar
+                val localAvatar = UserProfileManager.getLocalAvatarFile(getApplication())
+                if (localAvatar.exists() && localAvatar.length() > 0) {
+                    r2Sync.uploadAvatar(localAvatar)
+                } else {
+                    if (r2Sync.downloadAvatar(localAvatar)) {
+                        _userProfile.value = _userProfile.value.copy(avatarImagePath = localAvatar.absolutePath)
                     }
                 }
 
@@ -152,6 +205,10 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         if (R2Config.isCloudConnected) {
             viewModelScope.launch(Dispatchers.IO) {
                 r2Sync.saveRemoteProfile(p)
+                val avatarFile = UserProfileManager.getLocalAvatarFile(getApplication())
+                if (avatarFile.exists() && avatarFile.length() > 0) {
+                    r2Sync.uploadAvatar(avatarFile)
+                }
             }
         }
     }
@@ -164,7 +221,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         periodicSyncJob?.cancel()
     }
 
-    fun checkForUpdates(currentVersion: String = "3.1.0") {
+    fun checkForUpdates(currentVersion: String = "3.2.0") {
         viewModelScope.launch {
             _updateState.value = UpdateUiState.Checking
             val result = AppUpdater.checkForUpdate(currentVersion)

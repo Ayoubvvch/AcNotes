@@ -157,6 +157,16 @@ class R2SyncEngine {
                 }.awaitAll()
             }
 
+            // Step 5: Sync avatar from R2 if not present locally
+            try {
+                val localAvatar = UserProfileManager.getLocalAvatarFile(dbHelper.context)
+                if (!localAvatar.exists() || localAvatar.length() == 0L) {
+                    downloadAvatar(localAvatar)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Avatar sync error: ${e.message}")
+            }
+
             true
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed: ${e.message}", e)
@@ -432,6 +442,190 @@ class R2SyncEngine {
             }
         } catch (e: Exception) {
             Pair(false, e.message ?: "Connection failed")
+        }
+    }
+
+    suspend fun listBuckets(host: String, accessKey: String, secretKey: String): Pair<Boolean, List<String>> = withContext(Dispatchers.IO) {
+        try {
+            val cleanHost = R2Config.normalizeEndpoint(host)
+            val cleanAk = accessKey.trim()
+            val cleanSk = secretKey.trim()
+
+            val date = getAmzDate()
+            val shortDate = getShortDate()
+            val payloadHash = sha256Hex(ByteArray(0))
+
+            val canonicalHeaders = "host:$cleanHost\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+            val canonicalRequest = "GET\n/\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+
+            val signingKey = getSignatureKey(cleanSk, shortDate, R2Config.region, R2Config.service)
+            val stringToSign = "AWS4-HMAC-SHA256\n$date\n$shortDate/${R2Config.region}/${R2Config.service}/aws4_request\n${sha256Hex(canonicalRequest.toByteArray(Charsets.UTF_8))}"
+            val signature = hmacSha256Hex(signingKey, stringToSign)
+            val auth = "AWS4-HMAC-SHA256 Credential=$cleanAk/$shortDate/${R2Config.region}/${R2Config.service}/aws4_request, SignedHeaders=$signedHeaders, Signature=$signature"
+
+            val request = Request.Builder()
+                .url("https://$cleanHost/")
+                .get()
+                .header("Host", cleanHost)
+                .header("x-amz-date", date)
+                .header("x-amz-content-sha256", payloadHash)
+                .header("Authorization", auth)
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    return@withContext Pair(false, emptyList<String>())
+                }
+                val xml = resp.body?.string() ?: return@withContext Pair(true, emptyList<String>())
+                val buckets = parseBucketsFromXml(xml)
+                Pair(true, buckets)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "listBuckets error: ${e.message}", e)
+            Pair(false, emptyList<String>())
+        }
+    }
+
+    private fun parseBucketsFromXml(xml: String): List<String> {
+        val buckets = mutableListOf<String>()
+        try {
+            val factory = DocumentBuilderFactory.newInstance()
+            val builder = factory.newDocumentBuilder()
+            val doc = builder.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
+            val bucketNodes = doc.getElementsByTagName("Bucket")
+            for (i in 0 until bucketNodes.length) {
+                val node = bucketNodes.item(i)
+                if (node is org.w3c.dom.Element) {
+                    val nameNodes = node.getElementsByTagName("Name")
+                    if (nameNodes.length > 0) {
+                        val name = nameNodes.item(0).textContent.trim()
+                        if (name.isNotEmpty()) {
+                            buckets.add(name)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "parseBucketsFromXml error: ${e.message}")
+        }
+        return buckets
+    }
+
+    suspend fun createBucket(host: String, bucketName: String, accessKey: String, secretKey: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        try {
+            val cleanHost = R2Config.normalizeEndpoint(host)
+            val cleanBucket = bucketName.trim().lowercase()
+            val cleanAk = accessKey.trim()
+            val cleanSk = secretKey.trim()
+
+            if (cleanBucket.isBlank()) return@withContext Pair(false, "Bucket name cannot be empty")
+
+            val date = getAmzDate()
+            val shortDate = getShortDate()
+            val payloadHash = sha256Hex(ByteArray(0))
+
+            val canonicalHeaders = "host:$cleanHost\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+            val canonicalRequest = "PUT\n/$cleanBucket\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+
+            val signingKey = getSignatureKey(cleanSk, shortDate, R2Config.region, R2Config.service)
+            val stringToSign = "AWS4-HMAC-SHA256\n$date\n$shortDate/${R2Config.region}/${R2Config.service}/aws4_request\n${sha256Hex(canonicalRequest.toByteArray(Charsets.UTF_8))}"
+            val signature = hmacSha256Hex(signingKey, stringToSign)
+            val auth = "AWS4-HMAC-SHA256 Credential=$cleanAk/$shortDate/${R2Config.region}/${R2Config.service}/aws4_request, SignedHeaders=$signedHeaders, Signature=$signature"
+
+            val request = Request.Builder()
+                .url("https://$cleanHost/$cleanBucket")
+                .put(ByteArray(0).toRequestBody(null))
+                .header("Host", cleanHost)
+                .header("x-amz-date", date)
+                .header("x-amz-content-sha256", payloadHash)
+                .header("Authorization", auth)
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    Pair(true, "Bucket created successfully")
+                } else {
+                    val err = resp.body?.string() ?: ""
+                    Pair(false, "HTTP ${resp.code}: $err")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, e.message ?: "Failed to create bucket")
+        }
+    }
+
+    suspend fun uploadAvatar(file: java.io.File): Boolean = withContext(Dispatchers.IO) {
+        if (!R2Config.isConfigured || !file.exists()) return@withContext false
+        try {
+            val key = ".Vault/.profile_avatar.jpg"
+            val encodedKey = encodeKeyForUrl(key)
+            val date = getAmzDate()
+            val shortDate = getShortDate()
+            val body = file.readBytes()
+            val payloadHash = sha256Hex(body)
+
+            val canonicalHeaders = "host:${R2Config.endpointHost}\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+            val canonicalRequest = "PUT\n/${R2Config.bucket}/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+
+            val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
+
+            val request = Request.Builder()
+                .url("${R2Config.baseUrl}/$encodedKey")
+                .put(body.toRequestBody("image/jpeg".toMediaType()))
+                .header("Host", R2Config.endpointHost)
+                .header("x-amz-date", date)
+                .header("x-amz-content-sha256", payloadHash)
+                .header("Authorization", auth)
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                resp.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "uploadAvatar error: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun downloadAvatar(destFile: java.io.File): Boolean = withContext(Dispatchers.IO) {
+        if (!R2Config.isConfigured) return@withContext false
+        try {
+            val key = ".Vault/.profile_avatar.jpg"
+            val encodedKey = encodeKeyForUrl(key)
+            val date = getAmzDate()
+            val shortDate = getShortDate()
+            val payloadHash = sha256Hex(ByteArray(0))
+
+            val canonicalHeaders = "host:${R2Config.endpointHost}\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+            val canonicalRequest = "GET\n/${R2Config.bucket}/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+
+            val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
+
+            val request = Request.Builder()
+                .url("${R2Config.baseUrl}/$encodedKey")
+                .get()
+                .header("Host", R2Config.endpointHost)
+                .header("x-amz-date", date)
+                .header("x-amz-content-sha256", payloadHash)
+                .header("Authorization", auth)
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val bytes = resp.body?.bytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        destFile.outputStream().use { it.write(bytes) }
+                        true
+                    } else false
+                } else false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "downloadAvatar error: ${e.message}")
+            false
         }
     }
 

@@ -1,9 +1,13 @@
 package com.acmods.acnotes.ui.screens
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -17,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
@@ -25,6 +30,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -38,6 +44,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import java.io.File
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -95,6 +104,16 @@ fun NotesListScreen(
     var authEmoji by remember { mutableStateOf("👤") }
     var authErrorMessage by remember { mutableStateOf<String?>(null) }
     var isVerifyingAuth by remember { mutableStateOf(false) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { viewModel.setProfileAvatarUri(it) }
+    }
+
+    var discoveredBuckets by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isDiscoveringBuckets by remember { mutableStateOf(false) }
+    var hasDiscoveredBuckets by remember { mutableStateOf(false) }
+    var isCreatingNewBucket by remember { mutableStateOf(false) }
+    var newBucketInput by remember { mutableStateOf("") }
 
     val isHome = selectedFolder.isBlank() || selectedFolder.equals("home", ignoreCase = true)
 
@@ -174,17 +193,36 @@ fun NotesListScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val headerAvatarBitmap = remember(userProfile.avatarImagePath) {
+                            if (userProfile.avatarImagePath.isNotBlank()) {
+                                val file = File(userProfile.avatarImagePath)
+                                if (file.exists() && file.length() > 0) {
+                                    BitmapFactory.decodeFile(file.absolutePath)
+                                } else null
+                            } else null
+                        }
+
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(RoundedCornerShape(11.dp))
-                                .background(Color(0x2210B981)),
+                                .background(Color(0x2210B981))
+                                .clickable { showSettingsDialog = true },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = if (userProfile.avatarEmoji.isNotBlank()) userProfile.avatarEmoji else "Ac",
-                                fontSize = if (userProfile.avatarEmoji.isNotBlank()) 19.sp else 17.sp
-                            )
+                            if (headerAvatarBitmap != null) {
+                                Image(
+                                    bitmap = headerAvatarBitmap.asImageBitmap(),
+                                    contentDescription = "Avatar",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Text(
+                                    text = if (userProfile.avatarEmoji.isNotBlank()) userProfile.avatarEmoji else "Ac",
+                                    fontSize = if (userProfile.avatarEmoji.isNotBlank()) 19.sp else 17.sp
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
@@ -647,6 +685,10 @@ fun NotesListScreen(
                             onClick = {
                                 authMode = "signin"
                                 authErrorMessage = null
+                                hasDiscoveredBuckets = false
+                                discoveredBuckets = emptyList()
+                                isCreatingNewBucket = false
+                                newBucketInput = ""
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = EmeraldPrimary,
@@ -666,6 +708,10 @@ fun NotesListScreen(
                             onClick = {
                                 authMode = "signup"
                                 authErrorMessage = null
+                                hasDiscoveredBuckets = false
+                                discoveredBuckets = emptyList()
+                                isCreatingNewBucket = false
+                                newBucketInput = ""
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SurfaceCard,
@@ -697,27 +743,12 @@ fun NotesListScreen(
                             }
                         }
                     } else if (authMode == "signin") {
-                        // Sign In Form: Asks for R2 credentials
+                        // Sign In Form: Asks for R2 credentials only, discovers buckets automatically
                         OutlinedTextField(
                             value = authHost,
-                            onValueChange = { authHost = it; authErrorMessage = null },
+                            onValueChange = { authHost = it; authErrorMessage = null; hasDiscoveredBuckets = false },
                             label = { Text("Account ID or Endpoint") },
-                            placeholder = { Text("e.g. xxx.r2.cloudflarestorage.com") },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = EmeraldPrimary,
-                                unfocusedBorderColor = SurfaceBorder,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = authBucket,
-                            onValueChange = { authBucket = it; authErrorMessage = null },
-                            label = { Text("Bucket Name") },
-                            placeholder = { Text("e.g. my-vault") },
+                            placeholder = { Text("e.g. 5d0d1d468b161e84470798a691e7b5b9") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = EmeraldPrimary,
@@ -730,8 +761,9 @@ fun NotesListScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
                             value = authAccessKey,
-                            onValueChange = { authAccessKey = it; authErrorMessage = null },
+                            onValueChange = { authAccessKey = it; authErrorMessage = null; hasDiscoveredBuckets = false },
                             label = { Text("Access Key ID") },
+                            placeholder = { Text("e.g. d1fc280a9699...") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = EmeraldPrimary,
@@ -744,7 +776,7 @@ fun NotesListScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
                             value = authSecretKey,
-                            onValueChange = { authSecretKey = it; authErrorMessage = null },
+                            onValueChange = { authSecretKey = it; authErrorMessage = null; hasDiscoveredBuckets = false },
                             label = { Text("Secret Access Key") },
                             singleLine = true,
                             visualTransformation = if (showAuthSecret) VisualTransformation.None else PasswordVisualTransformation(),
@@ -766,30 +798,158 @@ fun NotesListScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
 
+                        // Smart Bucket Discovery Section
+                        if (hasDiscoveredBuckets) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("Select Vault Bucket:", color = EmeraldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (discoveredBuckets.isEmpty()) {
+                                Text("No buckets found on this account. Create one below:", color = TextMuted, fontSize = 12.sp)
+                            } else {
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                ) {
+                                    items(discoveredBuckets) { b ->
+                                        val isSelected = authBucket == b
+                                        Surface(
+                                            color = if (isSelected) EmeraldPrimary.copy(alpha = 0.2f) else SurfaceCard,
+                                            border = if (isSelected) BorderStroke(1.5.dp, EmeraldPrimary) else NormalBorder,
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.clickable { authBucket = b }
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                            ) {
+                                                if (isSelected) {
+                                                    Icon(Icons.Default.Check, contentDescription = null, tint = EmeraldLight, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                }
+                                                Text(
+                                                    text = b,
+                                                    color = if (isSelected) EmeraldLight else TextPrimary,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (isCreatingNewBucket) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedTextField(
+                                        value = newBucketInput,
+                                        onValueChange = { newBucketInput = it },
+                                        placeholder = { Text("new-bucket-name") },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = EmeraldPrimary,
+                                            unfocusedBorderColor = SurfaceBorder,
+                                            focusedTextColor = TextPrimary,
+                                            unfocusedTextColor = TextPrimary
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Button(
+                                        onClick = {
+                                            val clean = newBucketInput.trim().lowercase()
+                                            if (clean.isNotBlank()) {
+                                                isVerifyingAuth = true
+                                                viewModel.createAndSelectBucket(authHost, clean, authAccessKey, authSecretKey) { ok, msg ->
+                                                    isVerifyingAuth = false
+                                                    if (ok) {
+                                                        discoveredBuckets = discoveredBuckets + clean
+                                                        authBucket = clean
+                                                        isCreatingNewBucket = false
+                                                        newBucketInput = ""
+                                                    } else {
+                                                        authErrorMessage = msg
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
+                                    ) {
+                                        Text("Create")
+                                    }
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = { isCreatingNewBucket = true },
+                                    modifier = Modifier.padding(top = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("+ Create New Bucket", color = EmeraldPrimary, fontSize = 12.sp)
+                                }
+                            }
+                        }
+
                         if (authErrorMessage != null) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(text = authErrorMessage!!, color = RedDelete, fontSize = 12.sp)
                         }
                     } else if (authMode == "signup") {
-                        // Sign Up Form: All in one screen! Name + Avatar + Cloud info
-                        OutlinedTextField(
-                            value = authName,
-                            onValueChange = { authName = it; authErrorMessage = null },
-                            label = { Text("Your Name") },
-                            placeholder = { Text("e.g. Ayoub") },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = EmeraldPrimary,
-                                unfocusedBorderColor = SurfaceBorder,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        // Sign Up Form: Gallery Photo + Name + Auto-discovered Cloud info
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                        ) {
+                            val signupAvatarBitmap = remember(userProfile.avatarImagePath) {
+                                if (userProfile.avatarImagePath.isNotBlank()) {
+                                    val f = File(userProfile.avatarImagePath)
+                                    if (f.exists() && f.length() > 0) BitmapFactory.decodeFile(f.absolutePath) else null
+                                } else null
+                            }
 
-                        // Avatar Emoji Picker
-                        Text("Avatar Icon:", color = TextSecondary, fontSize = 11.sp)
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0x2210B981))
+                                    .clickable { galleryLauncher.launch("image/*") },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (signupAvatarBitmap != null) {
+                                    Image(
+                                        bitmap = signupAvatarBitmap.asImageBitmap(),
+                                        contentDescription = "Avatar",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.PhotoCamera, contentDescription = "Pick Photo", tint = EmeraldLight, modifier = Modifier.size(22.dp))
+                                        Text("Photo", color = TextMuted, fontSize = 9.sp)
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                OutlinedTextField(
+                                    value = authName,
+                                    onValueChange = { authName = it; authErrorMessage = null },
+                                    label = { Text("Your Name") },
+                                    placeholder = { Text("e.g. Ayoub") },
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = EmeraldPrimary,
+                                        unfocusedBorderColor = SurfaceBorder,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // Optional Emoji Quick Selector
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -800,13 +960,13 @@ fun NotesListScreen(
                                 val selected = authEmoji == em
                                 Box(
                                     modifier = Modifier
-                                        .size(34.dp)
+                                        .size(32.dp)
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (selected) Color(0x3310B981) else SurfaceCard)
                                         .clickable { authEmoji = em },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(text = em, fontSize = 17.sp)
+                                    Text(text = em, fontSize = 16.sp)
                                 }
                             }
                         }
@@ -814,24 +974,9 @@ fun NotesListScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         OutlinedTextField(
                             value = authHost,
-                            onValueChange = { authHost = it; authErrorMessage = null },
+                            onValueChange = { authHost = it; authErrorMessage = null; hasDiscoveredBuckets = false },
                             label = { Text("Account ID or Endpoint") },
-                            placeholder = { Text("xxx.r2.cloudflarestorage.com") },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = EmeraldPrimary,
-                                unfocusedBorderColor = SurfaceBorder,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = authBucket,
-                            onValueChange = { authBucket = it; authErrorMessage = null },
-                            label = { Text("Bucket Name") },
-                            placeholder = { Text("my-vault") },
+                            placeholder = { Text("e.g. 5d0d1d468b161e84470798a691e7b5b9") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = EmeraldPrimary,
@@ -844,7 +989,7 @@ fun NotesListScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
                             value = authAccessKey,
-                            onValueChange = { authAccessKey = it; authErrorMessage = null },
+                            onValueChange = { authAccessKey = it; authErrorMessage = null; hasDiscoveredBuckets = false },
                             label = { Text("Access Key ID") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
@@ -858,7 +1003,7 @@ fun NotesListScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
                             value = authSecretKey,
-                            onValueChange = { authSecretKey = it; authErrorMessage = null },
+                            onValueChange = { authSecretKey = it; authErrorMessage = null; hasDiscoveredBuckets = false },
                             label = { Text("Secret Access Key") },
                             singleLine = true,
                             visualTransformation = if (showAuthSecret) VisualTransformation.None else PasswordVisualTransformation(),
@@ -879,6 +1024,99 @@ fun NotesListScreen(
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
+
+                        // Smart Bucket Discovery in Sign Up
+                        if (hasDiscoveredBuckets) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("Select Vault Bucket:", color = EmeraldLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (discoveredBuckets.isEmpty()) {
+                                Text("No buckets found. Create a new bucket below:", color = TextMuted, fontSize = 12.sp)
+                            } else {
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                ) {
+                                    items(discoveredBuckets) { b ->
+                                        val isSelected = authBucket == b
+                                        Surface(
+                                            color = if (isSelected) EmeraldPrimary.copy(alpha = 0.2f) else SurfaceCard,
+                                            border = if (isSelected) BorderStroke(1.5.dp, EmeraldPrimary) else NormalBorder,
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.clickable { authBucket = b }
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                            ) {
+                                                if (isSelected) {
+                                                    Icon(Icons.Default.Check, contentDescription = null, tint = EmeraldLight, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                }
+                                                Text(
+                                                    text = b,
+                                                    color = if (isSelected) EmeraldLight else TextPrimary,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (isCreatingNewBucket) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedTextField(
+                                        value = newBucketInput,
+                                        onValueChange = { newBucketInput = it },
+                                        placeholder = { Text("new-bucket-name") },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = EmeraldPrimary,
+                                            unfocusedBorderColor = SurfaceBorder,
+                                            focusedTextColor = TextPrimary,
+                                            unfocusedTextColor = TextPrimary
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Button(
+                                        onClick = {
+                                            val clean = newBucketInput.trim().lowercase()
+                                            if (clean.isNotBlank()) {
+                                                isVerifyingAuth = true
+                                                viewModel.createAndSelectBucket(authHost, clean, authAccessKey, authSecretKey) { ok, msg ->
+                                                    isVerifyingAuth = false
+                                                    if (ok) {
+                                                        discoveredBuckets = discoveredBuckets + clean
+                                                        authBucket = clean
+                                                        isCreatingNewBucket = false
+                                                        newBucketInput = ""
+                                                    } else {
+                                                        authErrorMessage = msg
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
+                                    ) {
+                                        Text("Create")
+                                    }
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = { isCreatingNewBucket = true },
+                                    modifier = Modifier.padding(top = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("+ Create New Bucket", color = EmeraldPrimary, fontSize = 12.sp)
+                                }
+                            }
+                        }
 
                         if (authErrorMessage != null) {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -907,72 +1145,137 @@ fun NotesListScreen(
             },
             confirmButton = {
                 if (authMode == "signin") {
-                    Button(
-                        onClick = {
-                            if (authHost.isBlank() || authBucket.isBlank() || authAccessKey.isBlank() || authSecretKey.isBlank()) {
-                                authErrorMessage = "All 4 credential fields are required"
-                                return@Button
-                            }
-                            isVerifyingAuth = true
-                            authErrorMessage = null
-                            viewModel.connectCloudVault(
-                                endpoint = authHost,
-                                bucket = authBucket,
-                                accessKey = authAccessKey,
-                                secretKey = authSecretKey
-                            ) { success, msg ->
-                                isVerifyingAuth = false
-                                if (success) {
-                                    // Check if profile exists, if not ask name
-                                    if (userProfile.name.isBlank()) {
-                                        authMode = "ask_name"
-                                    }
-                                } else {
-                                    authErrorMessage = msg
+                    if (!hasDiscoveredBuckets) {
+                        Button(
+                            onClick = {
+                                if (authHost.isBlank() || authAccessKey.isBlank() || authSecretKey.isBlank()) {
+                                    authErrorMessage = "Account ID, Access Key ID, and Secret Key are required"
+                                    return@Button
                                 }
+                                isDiscoveringBuckets = true
+                                authErrorMessage = null
+                                viewModel.fetchBucketsForAccount(authHost, authAccessKey, authSecretKey) { ok, buckets, err ->
+                                    isDiscoveringBuckets = false
+                                    if (ok) {
+                                        discoveredBuckets = buckets
+                                        hasDiscoveredBuckets = true
+                                        if (buckets.isNotEmpty()) {
+                                            authBucket = if (buckets.contains("my-vault")) "my-vault" else buckets.first()
+                                        }
+                                    } else {
+                                        authErrorMessage = err
+                                    }
+                                }
+                            },
+                            enabled = !isDiscoveringBuckets,
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
+                        ) {
+                            if (isDiscoveringBuckets) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgDark, strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
                             }
-                        },
-                        enabled = !isVerifyingAuth,
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
-                    ) {
-                        if (isVerifyingAuth) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgDark, strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Find Buckets", fontWeight = FontWeight.Bold)
                         }
-                        Text("Connect & Restore", fontWeight = FontWeight.Bold)
+                    } else {
+                        Button(
+                            onClick = {
+                                if (authBucket.isBlank()) {
+                                    authErrorMessage = "Please select or create a bucket first"
+                                    return@Button
+                                }
+                                isVerifyingAuth = true
+                                authErrorMessage = null
+                                viewModel.connectCloudVault(
+                                    endpoint = authHost,
+                                    bucket = authBucket,
+                                    accessKey = authAccessKey,
+                                    secretKey = authSecretKey
+                                ) { success, msg ->
+                                    isVerifyingAuth = false
+                                    if (success) {
+                                        if (userProfile.name.isBlank()) {
+                                            authMode = "ask_name"
+                                        }
+                                    } else {
+                                        authErrorMessage = msg
+                                    }
+                                }
+                            },
+                            enabled = !isVerifyingAuth,
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
+                        ) {
+                            if (isVerifyingAuth) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgDark, strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text("Connect & Restore", fontWeight = FontWeight.Bold)
+                        }
                     }
                 } else if (authMode == "signup") {
-                    Button(
-                        onClick = {
-                            if (authHost.isBlank() || authBucket.isBlank() || authAccessKey.isBlank() || authSecretKey.isBlank()) {
-                                authErrorMessage = "All credential fields are required"
-                                return@Button
-                            }
-                            isVerifyingAuth = true
-                            authErrorMessage = null
-                            viewModel.connectCloudVault(
-                                endpoint = authHost,
-                                bucket = authBucket,
-                                accessKey = authAccessKey,
-                                secretKey = authSecretKey,
-                                name = authName
-                            ) { success, msg ->
-                                isVerifyingAuth = false
-                                if (success) {
-                                    viewModel.updateProfile(authName, authEmoji)
-                                } else {
-                                    authErrorMessage = msg
+                    if (!hasDiscoveredBuckets) {
+                        Button(
+                            onClick = {
+                                if (authHost.isBlank() || authAccessKey.isBlank() || authSecretKey.isBlank()) {
+                                    authErrorMessage = "Account ID, Access Key ID, and Secret Key are required"
+                                    return@Button
                                 }
+                                isDiscoveringBuckets = true
+                                authErrorMessage = null
+                                viewModel.fetchBucketsForAccount(authHost, authAccessKey, authSecretKey) { ok, buckets, err ->
+                                    isDiscoveringBuckets = false
+                                    if (ok) {
+                                        discoveredBuckets = buckets
+                                        hasDiscoveredBuckets = true
+                                        if (buckets.isNotEmpty()) {
+                                            authBucket = if (buckets.contains("my-vault")) "my-vault" else buckets.first()
+                                        }
+                                    } else {
+                                        authErrorMessage = err
+                                    }
+                                }
+                            },
+                            enabled = !isDiscoveringBuckets,
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
+                        ) {
+                            if (isDiscoveringBuckets) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgDark, strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
                             }
-                        },
-                        enabled = !isVerifyingAuth,
-                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
-                    ) {
-                        if (isVerifyingAuth) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgDark, strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Find Buckets", fontWeight = FontWeight.Bold)
                         }
-                        Text("Create & Connect", fontWeight = FontWeight.Bold)
+                    } else {
+                        Button(
+                            onClick = {
+                                if (authBucket.isBlank()) {
+                                    authErrorMessage = "Please select or create a bucket first"
+                                    return@Button
+                                }
+                                isVerifyingAuth = true
+                                authErrorMessage = null
+                                viewModel.connectCloudVault(
+                                    endpoint = authHost,
+                                    bucket = authBucket,
+                                    accessKey = authAccessKey,
+                                    secretKey = authSecretKey,
+                                    name = authName
+                                ) { success, msg ->
+                                    isVerifyingAuth = false
+                                    if (success) {
+                                        viewModel.updateProfile(authName, authEmoji)
+                                    } else {
+                                        authErrorMessage = msg
+                                    }
+                                }
+                            },
+                            enabled = !isVerifyingAuth,
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
+                        ) {
+                            if (isVerifyingAuth) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgDark, strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text("Create & Connect", fontWeight = FontWeight.Bold)
+                        }
                     }
                 } else if (authMode == "ask_name") {
                     Button(
@@ -1034,14 +1337,31 @@ fun NotesListScreen(
                             modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val settingsAvatarBitmap = remember(userProfile.avatarImagePath) {
+                                if (userProfile.avatarImagePath.isNotBlank()) {
+                                    val f = File(userProfile.avatarImagePath)
+                                    if (f.exists() && f.length() > 0) BitmapFactory.decodeFile(f.absolutePath) else null
+                                } else null
+                            }
+
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(46.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0x2210B981)),
+                                    .background(Color(0x2210B981))
+                                    .clickable { galleryLauncher.launch("image/*") },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(text = if (userProfile.avatarEmoji.isNotBlank()) userProfile.avatarEmoji else "👤", fontSize = 20.sp)
+                                if (settingsAvatarBitmap != null) {
+                                    Image(
+                                        bitmap = settingsAvatarBitmap.asImageBitmap(),
+                                        contentDescription = "Avatar",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Text(text = if (userProfile.avatarEmoji.isNotBlank()) userProfile.avatarEmoji else "👤", fontSize = 22.sp)
+                                }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
@@ -1056,6 +1376,12 @@ fun NotesListScreen(
                                     color = TextMuted,
                                     fontSize = 11.sp
                                 )
+                            }
+                            IconButton(
+                                onClick = { galleryLauncher.launch("image/*") },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(Icons.Default.PhotoCamera, contentDescription = "Change Photo", tint = EmeraldLight, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
@@ -1155,11 +1481,11 @@ fun NotesListScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text("AcNotes App", color = TextPrimary, fontSize = 13.sp)
-                                        Text("v3.1.0", color = TextMuted, fontSize = 12.sp)
+                                        Text("v3.2.0", color = TextMuted, fontSize = 12.sp)
                                     }
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Button(
-                                        onClick = { viewModel.checkForUpdates("3.1.0") },
+                                        onClick = { viewModel.checkForUpdates("3.2.0") },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = EmeraldPrimary,
                                             contentColor = BgDark

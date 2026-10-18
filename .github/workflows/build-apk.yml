@@ -33,34 +33,34 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.1.0.apk
+          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.2.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AcNotes-v3.1.0-Signed-APK
-          path: release-output/AcNotes-v3.1.0.apk
-          if-no-files-found: error
+            name: AcNotes-v3.2.0-Signed-APK
+            path: release-output/AcNotes-v3.2.0.apk
+            if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v3.1.0
-          name: "AcNotes v3.1.0 - Universal Cloud Sign In, Sign Up & Offline Mode"
-          body: |
-            ### 🚀 AcNotes v3.1.0 - Universal Cloud Sign In, Sign Up & Offline Mode
+            tag_name: v3.2.0
+            name: "AcNotes v3.2.0 - Smart Bucket Auto-Discovery & Gallery Profile Avatars"
+            body: |
+              ### 🚀 AcNotes v3.2.0 - Smart Bucket Auto-Discovery & Gallery Profile Avatars
 
-            - 🔑 **Streamlined Vault Sign In & Direct Data Recovery:**
-              - Fast, secure sign-in with your Cloudflare R2 / S3 credentials to immediately retrieve and sync your existing notes and folders.
-            - 👤 **Sign Up & Profile Personalization:**
-              - Clean single-screen sign up with customizable name and avatar icon, stored locally and backed up to your vault.
-            - 📴 **True Local-First Offline Mode:**
-              - Full app capabilities without login or sync required. Link cloud storage anytime from settings.
-            - 🔄 **In-App Updater with Live Progress:**
-              - Download and install official APK updates directly inside the app with real-time download percentage.
-            - 🔐 **Cryptographically Signed APK (In-Place Updates):**
-              - Install directly over previous releases without uninstalling.
-          files: release-output/AcNotes-v3.1.0.apk
+              - 🔍 **Smart S3 Bucket Auto-Discovery (No Manual Bucket Typing):**
+                - Connect effortlessly using only your Account ID, Access Key ID, and Secret Key. AcNotes automatically detects and presents existing buckets (e.g., `my-vault`) as selectable chips with 1-tap selection, plus instant "+ Create New Bucket" support.
+              - 📸 **Gallery Profile Picture Picker:**
+                - Pick and crop your avatar directly from your device Gallery (`image/*`). Avatars are saved locally and synced to your cloud vault (`.Vault/.profile_avatar.jpg`).
+              - 🖼️ **Dynamic Avatar Rendering:**
+                - Clean, circular avatar displays across the Top App Bar, Sign Up modal, and Account Settings modal.
+              - 🔄 **In-App Updater Ready:**
+                - Check for updates and download signed APKs directly within the app.
+              - 🔐 **Cryptographically Signed APK (In-Place Updates):**
+                - Retains release key signature for seamless in-place installation over existing releases.
+            files: release-output/AcNotes-v3.2.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
