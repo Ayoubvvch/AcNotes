@@ -33,34 +33,34 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.2.2.apk
+          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.3.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-            name: AcNotes-v3.2.2-Signed-APK
-            path: release-output/AcNotes-v3.2.2.apk
+            name: AcNotes-v3.3.0-Signed-APK
+            path: release-output/AcNotes-v3.3.0.apk
             if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-            tag_name: v3.2.2
-            name: "AcNotes v3.2.2 - Hidden .AcNotes Folder, Offline Connect & Profile Name Editor"
+            tag_name: v3.3.0
+            name: "AcNotes v3.3.0 - System Share Sheet Import, Multi-File Drive Upload & .Vault Storage"
             body: |
-              ### 🚀 AcNotes v3.2.2 - Hidden .AcNotes Folder, Offline Connect & Profile Name Editor
+              ### 🚀 AcNotes v3.3.0 - System Share Sheet Import, Multi-File Drive Upload & .Vault Storage
 
-              - 📁 **Organized Hidden Cloud Storage (`.AcNotes`):**
-                - All notes, subfolders, profile data (`.profile.json`), and custom gallery avatars (`.profile_avatar.jpg`) are now neatly housed inside a hidden root folder `.AcNotes/`.
-                - Fully backwards-compatible with existing notes and profiles in `.Vault/`.
-              - 🔌 **Seamless Offline-to-Cloud Connection:**
-                - Fixed unresponsive "Connect to Cloud Vault" button in Settings when operating in offline mode.
-                - Easily switch between offline mode and your Cloudflare R2 vault anytime.
-              - ✏️ **Editable Profile Name in Settings:**
-                - You can now edit your profile name directly inside Settings via the pencil icon, automatically updating both local storage and the cloud vault.
+              - 📤 **Android System Share Sheet Integration:**
+                - AcNotes now appears in the system Share Sheet across all apps (Google Drive, Chrome, WhatsApp, Telegram, Files, etc.).
+              - 📑 **Single & Multi-File Upload Support:**
+                - Share single or multiple markdown files, text files, code, or images directly into AcNotes with one tap.
+              - 📁 **Interactive "Upload to Vault" Modal:**
+                - Preview all incoming items, choose the destination folder (Home or any custom folder, or create a new folder on the spot), and tap **"Upload Here"**.
+              - ☁️ **Full .Vault Root Storage:**
+                - Reverted root storage fully to `.Vault/` across all notes, subfolders, profile, and avatar with complete backward compatibility.
               - 🔐 **Cryptographically Signed APK (In-Place Updates):**
                 - Retains release key signature for seamless in-place installation over existing releases.
-            files: release-output/AcNotes-v3.2.2.apk
+            files: release-output/AcNotes-v3.3.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

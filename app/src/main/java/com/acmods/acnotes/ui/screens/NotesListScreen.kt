@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Login
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.PushPin
@@ -43,6 +45,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import com.acmods.acnotes.ui.IncomingShareItem
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -87,6 +91,7 @@ fun NotesListScreen(
     val isCloudConnected by viewModel.isCloudConnected.collectAsState()
     val isInitialSetupDone by viewModel.isInitialSetupDone.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
+    val incomingShareItems by viewModel.incomingShareItems.collectAsState()
 
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
@@ -1551,11 +1556,11 @@ fun NotesListScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text("AcNotes App", color = TextPrimary, fontSize = 13.sp)
-                                        Text("v3.2.2", color = TextMuted, fontSize = 12.sp)
+                                        Text("v3.3.0", color = TextMuted, fontSize = 12.sp)
                                     }
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Button(
-                                        onClick = { viewModel.checkForUpdates("3.2.2") },
+                                        onClick = { viewModel.checkForUpdates("3.3.0") },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = EmeraldPrimary,
                                             contentColor = BgDark
@@ -1653,7 +1658,7 @@ fun NotesListScreen(
                                     Column {
                                         Text(text = "Update error: ${state.message}", color = RedDelete, fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        TextButton(onClick = { viewModel.checkForUpdates("3.2.2") }) {
+                                        TextButton(onClick = { viewModel.checkForUpdates("3.3.0") }) {
                                             Text("Retry", color = EmeraldPrimary)
                                         }
                                     }
@@ -1748,6 +1753,234 @@ fun NotesListScreen(
             containerColor = SurfaceDark
         )
     }
+
+    // Dialog: Upload to Vault (from Android Share Sheet)
+    incomingShareItems?.let { shareItems ->
+        if (shareItems.isNotEmpty()) {
+            UploadToVaultDialog(
+                items = shareItems,
+                folders = displayFolders,
+                onDismiss = { viewModel.dismissIncomingShare() },
+                onUpload = { targetFolder ->
+                    viewModel.uploadSharedNotes(targetFolder)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun UploadToVaultDialog(
+    items: List<IncomingShareItem>,
+    folders: List<String>,
+    onDismiss: () -> Unit,
+    onUpload: (targetFolder: String) -> Unit
+) {
+    var selectedUploadFolder by remember { mutableStateOf("Home") }
+    var showNewFolderInput by remember { mutableStateOf(false) }
+    var newFolderNameInput by remember { mutableStateOf("") }
+    val displayFoldersList = remember(folders) {
+        listOf("Home") + folders.filter { it.isNotBlank() && !it.equals("Home", ignoreCase = true) && !it.equals("uncategorized", ignoreCase = true) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0x2210B981)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CloudUpload, contentDescription = null, tint = EmeraldLight, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "Upload to Vault",
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                    Text(
+                        text = if (items.size == 1) "1 item selected" else "${items.size} items selected",
+                        color = TextMuted,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Items Preview List
+                Text("SELECTED ITEMS:", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    color = SurfaceCard,
+                    shape = RoundedCornerShape(10.dp),
+                    border = NormalBorder,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 140.dp)
+                ) {
+                    LazyColumn(modifier = Modifier.padding(6.dp)) {
+                        items(items) { item ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp, horizontal = 6.dp)
+                            ) {
+                                val iconText = when {
+                                    item.mimeType?.startsWith("image/") == true -> "🖼️"
+                                    item.displayName.endsWith(".md", ignoreCase = true) -> "📝"
+                                    item.displayName.endsWith(".txt", ignoreCase = true) -> "📄"
+                                    else -> "📎"
+                                }
+                                Text(text = iconText, fontSize = 15.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.displayName,
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val sizeStr = if (item.sizeBytes > 0) {
+                                        if (item.sizeBytes >= 1024 * 1024) {
+                                            String.format(Locale.US, "%.1f MB", item.sizeBytes / (1024f * 1024f))
+                                        } else {
+                                            String.format(Locale.US, "%.1f KB", item.sizeBytes / 1024f)
+                                        }
+                                    } else "Text document"
+                                    Text(
+                                        text = sizeStr,
+                                        color = TextMuted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Destination Folder Selector
+                Text("DESTINATION FOLDER:", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                ) {
+                    items(displayFoldersList) { f ->
+                        val isSelected = selectedUploadFolder.equals(f, ignoreCase = true)
+                        Surface(
+                            color = if (isSelected) EmeraldPrimary.copy(alpha = 0.2f) else SurfaceCard,
+                            border = if (isSelected) BorderStroke(1.5.dp, EmeraldPrimary) else NormalBorder,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.clickable { selectedUploadFolder = f }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = if (f.equals("Home", ignoreCase = true)) "🏠" else "📁",
+                                    fontSize = 13.sp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = f,
+                                    color = if (isSelected) EmeraldLight else TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+
+                    // + New Folder Chip
+                    item {
+                        Surface(
+                            color = SurfaceCard,
+                            border = NormalBorder,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.clickable { showNewFolderInput = !showNewFolderInput }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = EmeraldLight, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("New Folder", color = EmeraldLight, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+
+                if (showNewFolderInput) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = newFolderNameInput,
+                            onValueChange = { newFolderNameInput = it },
+                            placeholder = { Text("Folder name") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = EmeraldPrimary,
+                                unfocusedBorderColor = SurfaceBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = {
+                                val clean = newFolderNameInput.trim()
+                                if (clean.isNotBlank()) {
+                                    selectedUploadFolder = clean
+                                    showNewFolderInput = false
+                                    newFolderNameInput = ""
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = "Add", tint = EmeraldPrimary)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onUpload(selectedUploadFolder)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Upload Here", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = TextSecondary)
+            }
+        },
+        containerColor = SurfaceDark
+    )
 }
 
 @Composable

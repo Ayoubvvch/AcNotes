@@ -1,7 +1,10 @@
 package com.acmods.acnotes.ui
 
 import android.app.Application
+import android.content.ContentResolver
 import android.content.Context
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.acmods.acnotes.data.*
@@ -9,11 +12,20 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
 enum class NoteFilter { ALL, PINNED }
 enum class SyncState { IDLE, SYNCING, SAVED, OFFLINE }
+
+data class IncomingShareItem(
+    val uri: Uri? = null,
+    val displayName: String,
+    val mimeType: String? = null,
+    val sizeBytes: Long = 0L,
+    val textContent: String? = null
+)
 
 sealed class UpdateUiState {
     object Idle : UpdateUiState()
@@ -81,6 +93,13 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _updateState = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
     val updateState: StateFlow<UpdateUiState> = _updateState.asStateFlow()
+
+    private val _incomingShareItems = MutableStateFlow<List<IncomingShareItem>?>(null)
+    val incomingShareItems: StateFlow<List<IncomingShareItem>?> = _incomingShareItems.asStateFlow()
+
+    fun dismissIncomingShare() {
+        _incomingShareItems.value = null
+    }
 
     init {
         R2Config.init(application)
@@ -221,7 +240,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         periodicSyncJob?.cancel()
     }
 
-    fun checkForUpdates(currentVersion: String = "3.2.2") {
+    fun checkForUpdates(currentVersion: String = "3.3.0") {
         viewModelScope.launch {
             _updateState.value = UpdateUiState.Checking
             val result = AppUpdater.checkForUpdate(currentVersion)
@@ -523,6 +542,182 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 dbHelper.saveNote(note)
             }
             _syncState.value = if (ok) SyncState.SAVED else SyncState.OFFLINE
+        }
+    }
+
+    fun handleIncomingShare(intent: android.content.Intent, context: Context) {
+        val action = intent.action ?: return
+        if (action != android.content.Intent.ACTION_SEND && action != android.content.Intent.ACTION_SEND_MULTIPLE) {
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = mutableListOf<IncomingShareItem>()
+            val cr = context.contentResolver
+
+            if (action == android.content.Intent.ACTION_SEND) {
+                val streamUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<android.net.Uri>(android.content.Intent.EXTRA_STREAM)
+                }
+
+                if (streamUri != null) {
+                    resolveItemFromUri(streamUri, cr, context)?.let { items.add(it) }
+                } else {
+                    val sharedText = intent.getStringExtra(android.content.Intent.EXTRA_TEXT)
+                    if (!sharedText.isNullOrBlank()) {
+                        val subject = intent.getStringExtra(android.content.Intent.EXTRA_SUBJECT)
+                        val name = if (!subject.isNullOrBlank()) subject.trim() else {
+                            val firstLine = sharedText.trim().lineSequence().firstOrNull()?.trim() ?: "Shared Note"
+                            if (firstLine.length > 50) firstLine.take(47) + "…" else firstLine
+                        }
+                        items.add(
+                            IncomingShareItem(
+                                uri = null,
+                                displayName = name,
+                                mimeType = "text/plain",
+                                sizeBytes = sharedText.toByteArray(Charsets.UTF_8).size.toLong(),
+                                textContent = sharedText
+                            )
+                        )
+                    }
+                }
+            } else if (action == android.content.Intent.ACTION_SEND_MULTIPLE) {
+                val streamUris = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra<android.net.Uri>(android.content.Intent.EXTRA_STREAM)
+                }
+
+                if (!streamUris.isNullOrEmpty()) {
+                    for (uri in streamUris) {
+                        resolveItemFromUri(uri, cr, context)?.let { items.add(it) }
+                    }
+                } else {
+                    val clipData = intent.clipData
+                    if (clipData != null) {
+                        for (i in 0 until clipData.itemCount) {
+                            val uri = clipData.getItemAt(i).uri
+                            if (uri != null) {
+                                resolveItemFromUri(uri, cr, context)?.let { items.add(it) }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (items.isNotEmpty()) {
+                _screen.value = Screen.List
+                _incomingShareItems.value = items
+            }
+        }
+    }
+
+    private fun resolveItemFromUri(uri: android.net.Uri, cr: ContentResolver, context: Context): IncomingShareItem? {
+        return try {
+            var displayName = "Shared File"
+            var size = 0L
+            val mimeType = cr.getType(uri)
+
+            cr.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (cursor.moveToFirst()) {
+                    if (nameIdx != -1) displayName = cursor.getString(nameIdx) ?: displayName
+                    if (sizeIdx != -1) size = cursor.getLong(sizeIdx)
+                }
+            }
+
+            val isImage = mimeType?.startsWith("image/") == true ||
+                displayName.endsWith(".jpg", ignoreCase = true) ||
+                displayName.endsWith(".jpeg", ignoreCase = true) ||
+                displayName.endsWith(".png", ignoreCase = true) ||
+                displayName.endsWith(".webp", ignoreCase = true)
+
+            val textContent = if (isImage) {
+                try {
+                    val attachDir = File(context.filesDir, "attachments").apply { if (!exists()) mkdirs() }
+                    val cleanFileName = displayName.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                    val targetFile = File(attachDir, "${System.currentTimeMillis()}_$cleanFileName")
+                    cr.openInputStream(uri)?.use { input ->
+                        targetFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    if (targetFile.exists() && targetFile.length() > 0) {
+                        "![${displayName}](file://${targetFile.absolutePath})\n"
+                    } else null
+                } catch (e: Exception) {
+                    null
+                }
+            } else {
+                try {
+                    cr.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+
+            IncomingShareItem(
+                uri = uri,
+                displayName = displayName,
+                mimeType = mimeType,
+                sizeBytes = size,
+                textContent = textContent
+            )
+        } catch (e: Exception) {
+            Log.w("NotesViewModel", "resolveItemFromUri error: ${e.message}")
+            null
+        }
+    }
+
+    fun uploadSharedNotes(targetFolder: String) {
+        val items = _incomingShareItems.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val cleanFolder = if (targetFolder.isBlank() || targetFolder.equals("Home", ignoreCase = true)) "" else targetFolder.trim()
+            if (cleanFolder.isNotEmpty()) {
+                dbHelper.addFolder(cleanFolder)
+            }
+
+            val today = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(Date())
+            val newNotes = mutableListOf<Note>()
+
+            items.forEachIndexed { index, item ->
+                val baseTitle = item.displayName
+                    .removeSuffix(".md")
+                    .removeSuffix(".markdown")
+                    .removeSuffix(".txt")
+                    .trim()
+                val title = if (baseTitle.isNotBlank()) baseTitle else "Shared Note"
+                val text = item.textContent ?: ""
+                val id = System.currentTimeMillis() + index
+
+                val note = Note(
+                    id = id,
+                    title = title,
+                    text = text,
+                    preview = extractPreview(text),
+                    folder = cleanFolder,
+                    date = today,
+                    updatedAt = id,
+                    isPinned = false,
+                    syncKey = null
+                )
+                newNotes.add(note)
+            }
+
+            dbHelper.saveAll(newNotes)
+            loadData()
+            _incomingShareItems.value = null
+
+            // Switch to destination folder view
+            _selectedFolder.value = if (cleanFolder.isEmpty()) "Home" else cleanFolder
+
+            // Sync immediately to Cloud Vault
+            if (R2Config.isCloudConnected) {
+                syncNow()
+            }
         }
     }
 }

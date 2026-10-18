@@ -31,8 +31,15 @@ class MainActivity : ComponentActivity() {
         viewModel.syncNow()
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        viewModel.handleIncomingShare(intent, this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        intent?.let { viewModel.handleIncomingShare(it, this) }
 
         setContent {
             AcNotesTheme {
