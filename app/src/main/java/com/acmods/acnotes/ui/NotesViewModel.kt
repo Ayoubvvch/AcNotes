@@ -70,58 +70,101 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
     private var periodicSyncJob: Job? = null
 
-    private val _isSetupDone = MutableStateFlow(false)
-    val isSetupDone: StateFlow<Boolean> = _isSetupDone.asStateFlow()
+    private val _userProfile = MutableStateFlow(UserProfile())
+    val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
+
+    private val _isCloudConnected = MutableStateFlow(false)
+    val isCloudConnected: StateFlow<Boolean> = _isCloudConnected.asStateFlow()
+
+    private val _isInitialSetupDone = MutableStateFlow(false)
+    val isInitialSetupDone: StateFlow<Boolean> = _isInitialSetupDone.asStateFlow()
 
     private val _updateState = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
     val updateState: StateFlow<UpdateUiState> = _updateState.asStateFlow()
 
     init {
         R2Config.init(application)
-        _isSetupDone.value = R2Config.isConfigured
+        _userProfile.value = UserProfileManager.load(application)
+        _isCloudConnected.value = R2Config.isCloudConnected
+        _isInitialSetupDone.value = R2Config.isInitialSetupDone(application)
         loadData()
-        if (R2Config.isConfigured) {
+        if (R2Config.isCloudConnected) {
             syncNow()
             startPeriodicSync()
         }
     }
 
-    fun unlockAsOwner(password: String): Boolean {
-        val creds = OwnerVaultKey.unlock(password.trim()) ?: return false
-        R2Config.save(
-            getApplication(),
-            creds.endpointHost,
-            creds.bucket,
-            creds.accessKey,
-            creds.secretKey,
-            owner = true
-        )
-        _isSetupDone.value = true
-        syncNow()
-        startPeriodicSync()
-        return true
+    fun connectCloudVault(
+        endpoint: String,
+        bucket: String,
+        accessKey: String,
+        secretKey: String,
+        name: String = "",
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val (ok, msg) = r2Sync.testConnection(endpoint, bucket, accessKey, secretKey)
+            if (ok) {
+                R2Config.saveCloud(getApplication(), endpoint, bucket, accessKey, secretKey)
+                _isCloudConnected.value = true
+                _isInitialSetupDone.value = true
+
+                // Sync profile
+                if (name.isNotBlank()) {
+                    val p = _userProfile.value.copy(name = name.trim())
+                    _userProfile.value = p
+                    UserProfileManager.save(getApplication(), p)
+                    r2Sync.saveRemoteProfile(p)
+                } else {
+                    val remoteP = r2Sync.fetchRemoteProfile()
+                    if (remoteP != null && remoteP.name.isNotBlank()) {
+                        _userProfile.value = remoteP
+                        UserProfileManager.save(getApplication(), remoteP)
+                    }
+                }
+
+                syncNow()
+                startPeriodicSync()
+                onResult(true, "Connected successfully")
+            } else {
+                onResult(false, msg)
+            }
+        }
     }
 
-    fun setupCustomR2(endpoint: String, bucket: String, accessKey: String, secretKey: String): Boolean {
-        val ep = endpoint.trim().removePrefix("https://").removePrefix("http://").removeSuffix("/")
-        val b = bucket.trim()
-        val ak = accessKey.trim()
-        val sk = secretKey.trim()
-        if (ep.isBlank() || b.isBlank() || ak.isBlank() || sk.isBlank()) return false
-        R2Config.save(getApplication(), ep, b, ak, sk, owner = false)
-        _isSetupDone.value = true
-        syncNow()
-        startPeriodicSync()
-        return true
-    }
-
-    fun resetVaultConfig() {
-        R2Config.clear(getApplication())
-        _isSetupDone.value = false
+    fun continueOffline(name: String = "") {
+        R2Config.setOfflineMode(getApplication())
+        if (name.isNotBlank()) {
+            val p = _userProfile.value.copy(name = name.trim())
+            _userProfile.value = p
+            UserProfileManager.save(getApplication(), p)
+        }
+        _isCloudConnected.value = false
+        _isInitialSetupDone.value = true
         _syncState.value = SyncState.IDLE
+        loadData()
     }
 
-    fun checkForUpdates(currentVersion: String = "3.0.0") {
+    fun updateProfile(name: String, emoji: String) {
+        val p = _userProfile.value.copy(name = name.trim(), avatarEmoji = emoji)
+        _userProfile.value = p
+        UserProfileManager.save(getApplication(), p)
+        if (R2Config.isCloudConnected) {
+            viewModelScope.launch(Dispatchers.IO) {
+                r2Sync.saveRemoteProfile(p)
+            }
+        }
+    }
+
+    fun disconnectCloud() {
+        R2Config.clear(getApplication())
+        _isCloudConnected.value = false
+        _isInitialSetupDone.value = false
+        _syncState.value = SyncState.IDLE
+        periodicSyncJob?.cancel()
+    }
+
+    fun checkForUpdates(currentVersion: String = "3.1.0") {
         viewModelScope.launch {
             _updateState.value = UpdateUiState.Checking
             val result = AppUpdater.checkForUpdate(currentVersion)
@@ -395,6 +438,10 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun syncNow() {
+        if (!R2Config.isCloudConnected) {
+            _syncState.value = SyncState.IDLE
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _syncState.value = SyncState.SYNCING
             val success = r2Sync.sync(dbHelper)
@@ -408,6 +455,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun uploadNoteToR2(note: Note, oldKey: String? = null) {
+        if (!R2Config.isCloudConnected) return
         viewModelScope.launch(Dispatchers.IO) {
             _syncState.value = SyncState.SYNCING
             if (oldKey != null && oldKey != note.syncKey) {

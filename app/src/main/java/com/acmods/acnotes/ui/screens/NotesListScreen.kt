@@ -18,7 +18,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -43,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.acmods.acnotes.data.Note
 import com.acmods.acnotes.data.R2Config
+import com.acmods.acnotes.data.UserProfile
 import com.acmods.acnotes.ui.*
 import com.acmods.acnotes.ui.theme.*
 import java.util.Locale
@@ -65,7 +72,10 @@ fun NotesListScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val filter by viewModel.filter.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
-    val isSetupDone by viewModel.isSetupDone.collectAsState()
+
+    val userProfile by viewModel.userProfile.collectAsState()
+    val isCloudConnected by viewModel.isCloudConnected.collectAsState()
+    val isInitialSetupDone by viewModel.isInitialSetupDone.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
 
     var showNewFolderDialog by remember { mutableStateOf(false) }
@@ -73,18 +83,18 @@ fun NotesListScreen(
     var showDeleteFolderDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
 
-    // Onboarding Auth State
-    var setupMode by remember { mutableStateOf<String?>(null) } // null, "owner", "custom"
-    var ownerPassword by remember { mutableStateOf("") }
-    var showOwnerPassword by remember { mutableStateOf(false) }
-    var ownerAuthError by remember { mutableStateOf<String?>(null) }
-
-    var customEndpoint by remember { mutableStateOf("") }
-    var customBucket by remember { mutableStateOf("") }
-    var customAccessKey by remember { mutableStateOf("") }
-    var customSecretKey by remember { mutableStateOf("") }
-    var showCustomSecret by remember { mutableStateOf(false) }
-    var customAuthError by remember { mutableStateOf<String?>(null) }
+    // Authentication & Onboarding Modal State
+    // Modes: null (choose: Sign In / Sign Up / Offline), "signin", "signup", "ask_name"
+    var authMode by remember { mutableStateOf<String?>(null) }
+    var authHost by remember { mutableStateOf("") }
+    var authBucket by remember { mutableStateOf("") }
+    var authAccessKey by remember { mutableStateOf("") }
+    var authSecretKey by remember { mutableStateOf("") }
+    var showAuthSecret by remember { mutableStateOf(false) }
+    var authName by remember { mutableStateOf("") }
+    var authEmoji by remember { mutableStateOf("👤") }
+    var authErrorMessage by remember { mutableStateOf<String?>(null) }
+    var isVerifyingAuth by remember { mutableStateOf(false) }
 
     val isHome = selectedFolder.isBlank() || selectedFolder.equals("home", ignoreCase = true)
 
@@ -172,31 +182,58 @@ fun NotesListScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Ac",
-                                color = EmeraldLight,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 18.sp
+                                text = if (userProfile.avatarEmoji.isNotBlank()) userProfile.avatarEmoji else "Ac",
+                                fontSize = if (userProfile.avatarEmoji.isNotBlank()) 19.sp else 17.sp
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "AcNotes",
+                                text = if (userProfile.name.isNotBlank()) userProfile.name else "AcNotes",
                                 color = TextPrimary,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Text(
-                                text = "Home",
-                                color = TextMuted,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isCloudConnected) EmeraldPrimary else TextMuted)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (isCloudConnected) "Cloud Synced" else "Offline Mode",
+                                    color = TextMuted,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        SyncStatusBadge(syncState = syncState, onSyncClick = { viewModel.syncNow() })
+                        if (isCloudConnected) {
+                            SyncStatusBadge(syncState = syncState, onSyncClick = { viewModel.syncNow() })
+                        } else {
+                            Surface(
+                                color = SurfaceCard,
+                                shape = RoundedCornerShape(14.dp),
+                                border = NormalBorder,
+                                modifier = Modifier.clickable { showSettingsDialog = true }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                ) {
+                                    Icon(Icons.Default.CloudOff, contentDescription = null, tint = TextMuted, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text("Offline", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         IconButton(
                             onClick = { showSettingsDialog = true },
@@ -251,7 +288,9 @@ fun NotesListScreen(
                     }
 
                     Spacer(modifier = Modifier.width(4.dp))
-                    SyncStatusBadge(syncState = syncState, onSyncClick = { viewModel.syncNow() })
+                    if (isCloudConnected) {
+                        SyncStatusBadge(syncState = syncState, onSyncClick = { viewModel.syncNow() })
+                    }
                     Spacer(modifier = Modifier.width(6.dp))
                     IconButton(
                         onClick = { showSettingsDialog = true },
@@ -558,26 +597,30 @@ fun NotesListScreen(
         }
     }
 
-    // Modal: First Launch Onboarding / Cloud Vault Authentication
-    // As instructed: "كلمة سر تظهر مرة واحد فقط في بداية التطبيق ولا تظهر مجددا أبدا"
-    if (!isSetupDone) {
+    // Modal: Universal Onboarding / Sign In / Sign Up / Work Offline
+    if (!isInitialSetupDone) {
         AlertDialog(
-            onDismissRequest = { /* Persistent until user unlocks or configures */ },
+            onDismissRequest = { /* Must choose an option on first launch */ },
             title = {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(9.dp))
                                 .background(Color(0x2210B981)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(text = "🔐", fontSize = 16.sp)
+                            Text(text = "🏛️", fontSize = 17.sp)
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Cloud Vault Setup",
+                            text = when (authMode) {
+                                "signin" -> "Sign In to Vault"
+                                "signup" -> "Create Workspace"
+                                "ask_name" -> "Profile Name"
+                                else -> "Welcome to AcNotes"
+                            },
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp
@@ -585,7 +628,12 @@ fun NotesListScreen(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Connect your encrypted Cloudflare R2 or S3 notes vault.",
+                        text = when (authMode) {
+                            "signin" -> "Connect an existing Cloudflare R2 / S3 vault to restore notes."
+                            "signup" -> "Personalize your profile and set up cloud backup."
+                            "ask_name" -> "Enter your name to personalize your workspace."
+                            else -> "Choose how you want to set up your workspace."
+                        },
                         color = TextMuted,
                         fontSize = 12.sp
                     )
@@ -593,18 +641,12 @@ fun NotesListScreen(
             },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    if (setupMode == null) {
-                        Text(
-                            text = "Are you the Owner of this vault?",
-                            color = TextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
+                    if (authMode == null) {
+                        // Mode Selection: Sign In / Sign Up / Offline
                         Button(
                             onClick = {
-                                setupMode = "owner"
-                                ownerAuthError = null
+                                authMode = "signin"
+                                authErrorMessage = null
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = EmeraldPrimary,
@@ -613,68 +655,53 @@ fun NotesListScreen(
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("👑 Yes, I am the Owner", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Sign In (Connect Existing Vault)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                authMode = "signup"
+                                authErrorMessage = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SurfaceCard,
+                                contentColor = TextPrimary
+                            ),
+                            border = NormalBorder,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.PersonAdd, contentDescription = null, tint = EmeraldLight, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Sign Up (New Workspace)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            }
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         OutlinedButton(
                             onClick = {
-                                setupMode = "custom"
-                                customAuthError = null
+                                viewModel.continueOffline()
                             },
                             border = NormalBorder,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("☁️ No (Connect custom R2 / S3)", color = TextSecondary, fontSize = 13.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CloudOff, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Work Offline (No Cloud Sync)", color = TextSecondary, fontSize = 13.sp)
+                            }
                         }
-                    } else if (setupMode == "owner") {
-                        Text(
-                            text = "Enter Owner Master Password to unlock your encrypted Cloudflare R2 credentials:",
-                            color = TextSecondary,
-                            fontSize = 13.sp
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
+                    } else if (authMode == "signin") {
+                        // Sign In Form: Asks for R2 credentials
                         OutlinedTextField(
-                            value = ownerPassword,
-                            onValueChange = {
-                                ownerPassword = it
-                                ownerAuthError = null
-                            },
-                            label = { Text("Master Password") },
-                            singleLine = true,
-                            visualTransformation = if (showOwnerPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                IconButton(onClick = { showOwnerPassword = !showOwnerPassword }) {
-                                    Icon(
-                                        if (showOwnerPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = "Toggle Visibility",
-                                        tint = TextMuted
-                                    )
-                                }
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = EmeraldPrimary,
-                                unfocusedBorderColor = SurfaceBorder,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (ownerAuthError != null) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = ownerAuthError!!, color = RedDelete, fontSize = 12.sp)
-                        }
-                    } else if (setupMode == "custom") {
-                        Text(
-                            text = "Enter your custom Cloudflare R2 or S3 credentials:",
-                            color = TextSecondary,
-                            fontSize = 13.sp
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = customEndpoint,
-                            onValueChange = { customEndpoint = it },
-                            label = { Text("Endpoint Host") },
+                            value = authHost,
+                            onValueChange = { authHost = it; authErrorMessage = null },
+                            label = { Text("Account ID or Endpoint") },
                             placeholder = { Text("e.g. xxx.r2.cloudflarestorage.com") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
@@ -687,8 +714,8 @@ fun NotesListScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
-                            value = customBucket,
-                            onValueChange = { customBucket = it },
+                            value = authBucket,
+                            onValueChange = { authBucket = it; authErrorMessage = null },
                             label = { Text("Bucket Name") },
                             placeholder = { Text("e.g. my-vault") },
                             singleLine = true,
@@ -702,8 +729,8 @@ fun NotesListScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
-                            value = customAccessKey,
-                            onValueChange = { customAccessKey = it },
+                            value = authAccessKey,
+                            onValueChange = { authAccessKey = it; authErrorMessage = null },
                             label = { Text("Access Key ID") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
@@ -716,15 +743,15 @@ fun NotesListScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
-                            value = customSecretKey,
-                            onValueChange = { customSecretKey = it },
+                            value = authSecretKey,
+                            onValueChange = { authSecretKey = it; authErrorMessage = null },
                             label = { Text("Secret Access Key") },
                             singleLine = true,
-                            visualTransformation = if (showCustomSecret) VisualTransformation.None else PasswordVisualTransformation(),
+                            visualTransformation = if (showAuthSecret) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
-                                IconButton(onClick = { showCustomSecret = !showCustomSecret }) {
+                                IconButton(onClick = { showAuthSecret = !showAuthSecret }) {
                                     Icon(
-                                        if (showCustomSecret) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        if (showAuthSecret) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                         contentDescription = "Toggle Visibility",
                                         tint = TextMuted
                                     )
@@ -738,43 +765,232 @@ fun NotesListScreen(
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
-                        if (customAuthError != null) {
+
+                        if (authErrorMessage != null) {
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = customAuthError!!, color = RedDelete, fontSize = 12.sp)
+                            Text(text = authErrorMessage!!, color = RedDelete, fontSize = 12.sp)
                         }
+                    } else if (authMode == "signup") {
+                        // Sign Up Form: All in one screen! Name + Avatar + Cloud info
+                        OutlinedTextField(
+                            value = authName,
+                            onValueChange = { authName = it; authErrorMessage = null },
+                            label = { Text("Your Name") },
+                            placeholder = { Text("e.g. Ayoub") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = EmeraldPrimary,
+                                unfocusedBorderColor = SurfaceBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Avatar Emoji Picker
+                        Text("Avatar Icon:", color = TextSecondary, fontSize = 11.sp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf("👤", "🚀", "🧠", "⚡", "📚", "🏛️", "🌿", "💎").forEach { em ->
+                                val selected = authEmoji == em
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (selected) Color(0x3310B981) else SurfaceCard)
+                                        .clickable { authEmoji = em },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = em, fontSize = 17.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = authHost,
+                            onValueChange = { authHost = it; authErrorMessage = null },
+                            label = { Text("Account ID or Endpoint") },
+                            placeholder = { Text("xxx.r2.cloudflarestorage.com") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = EmeraldPrimary,
+                                unfocusedBorderColor = SurfaceBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = authBucket,
+                            onValueChange = { authBucket = it; authErrorMessage = null },
+                            label = { Text("Bucket Name") },
+                            placeholder = { Text("my-vault") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = EmeraldPrimary,
+                                unfocusedBorderColor = SurfaceBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = authAccessKey,
+                            onValueChange = { authAccessKey = it; authErrorMessage = null },
+                            label = { Text("Access Key ID") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = EmeraldPrimary,
+                                unfocusedBorderColor = SurfaceBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = authSecretKey,
+                            onValueChange = { authSecretKey = it; authErrorMessage = null },
+                            label = { Text("Secret Access Key") },
+                            singleLine = true,
+                            visualTransformation = if (showAuthSecret) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { showAuthSecret = !showAuthSecret }) {
+                                    Icon(
+                                        if (showAuthSecret) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Toggle Visibility",
+                                        tint = TextMuted
+                                    )
+                                }
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = EmeraldPrimary,
+                                unfocusedBorderColor = SurfaceBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (authErrorMessage != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = authErrorMessage!!, color = RedDelete, fontSize = 12.sp)
+                        }
+                    } else if (authMode == "ask_name") {
+                        // Follow-up if sign in had no profile name
+                        Text("What should we call you?", color = TextSecondary, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = authName,
+                            onValueChange = { authName = it },
+                            label = { Text("Your Name") },
+                            placeholder = { Text("e.g. Ayoub") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = EmeraldPrimary,
+                                unfocusedBorderColor = SurfaceBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             },
             confirmButton = {
-                if (setupMode == "owner") {
+                if (authMode == "signin") {
                     Button(
                         onClick = {
-                            val success = viewModel.unlockAsOwner(ownerPassword)
-                            if (!success) {
-                                ownerAuthError = "Incorrect password. Access denied."
+                            if (authHost.isBlank() || authBucket.isBlank() || authAccessKey.isBlank() || authSecretKey.isBlank()) {
+                                authErrorMessage = "All 4 credential fields are required"
+                                return@Button
+                            }
+                            isVerifyingAuth = true
+                            authErrorMessage = null
+                            viewModel.connectCloudVault(
+                                endpoint = authHost,
+                                bucket = authBucket,
+                                accessKey = authAccessKey,
+                                secretKey = authSecretKey
+                            ) { success, msg ->
+                                isVerifyingAuth = false
+                                if (success) {
+                                    // Check if profile exists, if not ask name
+                                    if (userProfile.name.isBlank()) {
+                                        authMode = "ask_name"
+                                    }
+                                } else {
+                                    authErrorMessage = msg
+                                }
                             }
                         },
+                        enabled = !isVerifyingAuth,
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
                     ) {
-                        Text("Unlock Vault", fontWeight = FontWeight.Bold)
+                        if (isVerifyingAuth) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgDark, strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text("Connect & Restore", fontWeight = FontWeight.Bold)
                     }
-                } else if (setupMode == "custom") {
+                } else if (authMode == "signup") {
                     Button(
                         onClick = {
-                            val ok = viewModel.setupCustomR2(customEndpoint, customBucket, customAccessKey, customSecretKey)
-                            if (!ok) {
-                                customAuthError = "Please fill in all 4 credential fields."
+                            if (authHost.isBlank() || authBucket.isBlank() || authAccessKey.isBlank() || authSecretKey.isBlank()) {
+                                authErrorMessage = "All credential fields are required"
+                                return@Button
                             }
+                            isVerifyingAuth = true
+                            authErrorMessage = null
+                            viewModel.connectCloudVault(
+                                endpoint = authHost,
+                                bucket = authBucket,
+                                accessKey = authAccessKey,
+                                secretKey = authSecretKey,
+                                name = authName
+                            ) { success, msg ->
+                                isVerifyingAuth = false
+                                if (success) {
+                                    viewModel.updateProfile(authName, authEmoji)
+                                } else {
+                                    authErrorMessage = msg
+                                }
+                            }
+                        },
+                        enabled = !isVerifyingAuth,
+                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
+                    ) {
+                        if (isVerifyingAuth) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgDark, strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text("Create & Connect", fontWeight = FontWeight.Bold)
+                    }
+                } else if (authMode == "ask_name") {
+                    Button(
+                        onClick = {
+                            if (authName.isNotBlank()) {
+                                viewModel.updateProfile(authName, "👤")
+                            }
+                            authMode = null
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark)
                     ) {
-                        Text("Connect", fontWeight = FontWeight.Bold)
+                        Text("Save & Enter", fontWeight = FontWeight.Bold)
                     }
                 }
             },
             dismissButton = {
-                if (setupMode != null) {
-                    TextButton(onClick = { setupMode = null }) {
+                if (authMode != null && authMode != "ask_name") {
+                    TextButton(onClick = { authMode = null }) {
                         Text("← Back", color = TextSecondary)
                     }
                 }
@@ -783,7 +999,7 @@ fun NotesListScreen(
         )
     }
 
-    // Modal: Settings & In-App Updates
+    // Modal: Settings & In-App Updates & Account Management
     if (showSettingsDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -802,44 +1018,119 @@ fun NotesListScreen(
                         Text(text = "⚙️", fontSize = 16.sp)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("Settings & Updates", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("Settings & Account", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
             },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // App Info
+                    // Profile Card
                     Surface(
                         color = SurfaceCard,
                         shape = RoundedCornerShape(12.dp),
                         border = NormalBorder,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0x2210B981)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text("AcNotes App", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Surface(
-                                    color = Color(0x2210B981),
-                                    shape = RoundedCornerShape(6.dp)
+                                Text(text = if (userProfile.avatarEmoji.isNotBlank()) userProfile.avatarEmoji else "👤", fontSize = 20.sp)
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (userProfile.name.isNotBlank()) userProfile.name else "AcNotes User",
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                )
+                                Text(
+                                    text = if (isCloudConnected) "Cloud: ${R2Config.bucket}" else "Mode: Offline (Local Storage)",
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Cloud Vault Section
+                    Text("CLOUD VAULT", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Surface(
+                        color = SurfaceCard,
+                        shape = RoundedCornerShape(12.dp),
+                        border = NormalBorder,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            if (isCloudConnected) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "v3.0.0",
-                                        color = EmeraldLight,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(EmeraldPrimary)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Connected to R2", color = EmeraldLight, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                    TextButton(onClick = { viewModel.syncNow() }) {
+                                        Text("Sync Now", color = EmeraldPrimary, fontSize = 12.sp)
+                                    }
+                                }
+                                Text(
+                                    text = "Host: ${R2Config.endpointHost}",
+                                    color = TextMuted,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.disconnectCloud()
+                                        showSettingsDialog = false
+                                    },
+                                    border = NormalBorder,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Disconnect Cloud / Switch Vault", color = RedDelete, fontSize = 12.sp)
+                                }
+                            } else {
+                                Text("You are currently working in offline local mode.", color = TextMuted, fontSize = 12.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        showSettingsDialog = false
+                                        authMode = "signin"
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary, contentColor = BgDark),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Cloud, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Connect to Cloud Vault", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (R2Config.isOwner) "Vault: 👑 Owner (AES-256-GCM Protected)" else "Vault: ☁️ ${R2Config.bucket}",
-                                color = TextSecondary,
-                                fontSize = 12.sp
-                            )
                         }
                     }
 
@@ -847,7 +1138,7 @@ fun NotesListScreen(
 
                     // In-App Update Engine Section
                     Text("SOFTWARE UPDATES", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     Surface(
                         color = SurfaceCard,
@@ -858,14 +1149,17 @@ fun NotesListScreen(
                         Column(modifier = Modifier.padding(14.dp)) {
                             when (val state = updateState) {
                                 is UpdateUiState.Idle -> {
-                                    Text(
-                                        text = "Check for official updates released on GitHub.",
-                                        color = TextMuted,
-                                        fontSize = 12.sp
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("AcNotes App", color = TextPrimary, fontSize = 13.sp)
+                                        Text("v3.1.0", color = TextMuted, fontSize = 12.sp)
+                                    }
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Button(
-                                        onClick = { viewModel.checkForUpdates("3.0.0") },
+                                        onClick = { viewModel.checkForUpdates("3.1.0") },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = EmeraldPrimary,
                                             contentColor = BgDark
@@ -887,7 +1181,7 @@ fun NotesListScreen(
                                             strokeWidth = 2.dp
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
-                                        Text("Connecting to GitHub...", color = TextSecondary, fontSize = 13.sp)
+                                        Text("Checking GitHub for updates...", color = TextSecondary, fontSize = 13.sp)
                                     }
                                 }
                                 is UpdateUiState.UpToDate -> {
@@ -963,28 +1257,13 @@ fun NotesListScreen(
                                     Column {
                                         Text(text = "Update error: ${state.message}", color = RedDelete, fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        TextButton(onClick = { viewModel.checkForUpdates("3.0.0") }) {
+                                        TextButton(onClick = { viewModel.checkForUpdates("3.1.0") }) {
                                             Text("Retry", color = EmeraldPrimary)
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Reconfigure cloud option
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.resetVaultConfig()
-                            showSettingsDialog = false
-                        },
-                        border = NormalBorder,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Reset / Change Vault Credentials", color = TextMuted, fontSize = 12.sp)
                     }
                 }
             },

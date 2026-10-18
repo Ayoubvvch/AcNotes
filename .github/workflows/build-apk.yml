@@ -33,35 +33,34 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.0.0.apk
+          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.1.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AcNotes-v3.0.0-Signed-APK
-          path: release-output/AcNotes-v3.0.0.apk
+          name: AcNotes-v3.1.0-Signed-APK
+          path: release-output/AcNotes-v3.1.0.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v3.0.0
-          name: "AcNotes v3.0.0 - Public Open-Source Release & Vault Encryption"
+          tag_name: v3.1.0
+          name: "AcNotes v3.1.0 - Universal Cloud Sign In, Sign Up & Offline Mode"
           body: |
-            ### 🔐 AcNotes v3.0.0 - Public Open-Source Release & Vault Encryption
+            ### 🚀 AcNotes v3.1.0 - Universal Cloud Sign In, Sign Up & Offline Mode
 
-            - 🛡️ **Zero Plain-Text Credentials & AES-256-GCM Vault Protection:**
-              - Complete cryptographic protection. Cloudflare R2 credentials are encrypted and can only be unlocked with the Owner Master Password.
-              - Multi-tenant support: Public users can connect their own Cloudflare R2 or S3 bucket seamlessly.
-            - 🔄 **In-App Updater with Live Download Progress:**
-              - Check for updates directly inside the app with real-time download progress and instant package installation prompt.
-            - 🗂️ **Isolated Folder & Home Architecture:**
-              - Notes inside folders remain strictly inside folders; clean, uncluttered Home view.
-            - ⏱️ **Newest-First Chronological Ordering:**
-              - Most recently added notes always appear at the top.
+            - 🔑 **Streamlined Vault Sign In & Direct Data Recovery:**
+              - Fast, secure sign-in with your Cloudflare R2 / S3 credentials to immediately retrieve and sync your existing notes and folders.
+            - 👤 **Sign Up & Profile Personalization:**
+              - Clean single-screen sign up with customizable name and avatar icon, stored locally and backed up to your vault.
+            - 📴 **True Local-First Offline Mode:**
+              - Full app capabilities without login or sync required. Link cloud storage anytime from settings.
+            - 🔄 **In-App Updater with Live Progress:**
+              - Download and install official APK updates directly inside the app with real-time download percentage.
             - 🔐 **Cryptographically Signed APK (In-Place Updates):**
               - Install directly over previous releases without uninstalling.
-          files: release-output/AcNotes-v3.0.0.apk
+          files: release-output/AcNotes-v3.1.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

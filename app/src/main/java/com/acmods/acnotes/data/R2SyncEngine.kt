@@ -330,6 +330,111 @@ class R2SyncEngine {
         }
     }
 
+    suspend fun putObject(key: String, content: String, contentType: String = "text/plain"): Boolean = withContext(Dispatchers.IO) {
+        if (!R2Config.isConfigured) return@withContext false
+        try {
+            val encodedKey = encodeKeyForUrl(key)
+            val date = getAmzDate()
+            val shortDate = getShortDate()
+            val body = content.toByteArray(Charsets.UTF_8)
+            val payloadHash = sha256Hex(body)
+
+            val canonicalHeaders = "host:${R2Config.endpointHost}\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+            val canonicalRequest = "PUT\n/${R2Config.bucket}/$encodedKey\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+
+            val auth = buildAuthHeader(canonicalRequest, shortDate, date, signedHeaders)
+
+            val request = Request.Builder()
+                .url("${R2Config.baseUrl}/$encodedKey")
+                .put(body.toRequestBody(contentType.toMediaType()))
+                .header("Host", R2Config.endpointHost)
+                .header("x-amz-date", date)
+                .header("x-amz-content-sha256", payloadHash)
+                .header("Authorization", auth)
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                resp.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "putObject failed for $key: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun fetchRemoteProfile(): UserProfile? = withContext(Dispatchers.IO) {
+        if (!R2Config.isConfigured) return@withContext null
+        try {
+            val raw = getObject(".Vault/.profile.json") ?: return@withContext null
+            val json = org.json.JSONObject(raw)
+            UserProfile(
+                name = json.optString("name", ""),
+                email = json.optString("email", ""),
+                avatarEmoji = json.optString("avatarEmoji", "👤")
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun saveRemoteProfile(profile: UserProfile): Boolean = withContext(Dispatchers.IO) {
+        if (!R2Config.isConfigured) return@withContext false
+        try {
+            val json = org.json.JSONObject().apply {
+                put("name", profile.name)
+                put("email", profile.email)
+                put("avatarEmoji", profile.avatarEmoji)
+                put("updatedAt", System.currentTimeMillis())
+            }
+            putObject(".Vault/.profile.json", json.toString(), "application/json")
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun testConnection(host: String, bucket: String, accessKey: String, secretKey: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        try {
+            val cleanHost = R2Config.normalizeEndpoint(host)
+            val cleanBucket = bucket.trim()
+            val cleanAk = accessKey.trim()
+            val cleanSk = secretKey.trim()
+
+            val date = getAmzDate()
+            val shortDate = getShortDate()
+            val payloadHash = sha256Hex(ByteArray(0))
+            val query = "prefix=.Vault/&max-keys=10"
+
+            val canonicalHeaders = "host:$cleanHost\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
+            val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+            val canonicalRequest = "GET\n/$cleanBucket\n$query\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+
+            val signingKey = getSignatureKey(cleanSk, shortDate, R2Config.region, R2Config.service)
+            val stringToSign = "AWS4-HMAC-SHA256\n$date\n$shortDate/${R2Config.region}/${R2Config.service}/aws4_request\n${sha256Hex(canonicalRequest.toByteArray(Charsets.UTF_8))}"
+            val signature = hmacSha256Hex(signingKey, stringToSign)
+            val auth = "AWS4-HMAC-SHA256 Credential=$cleanAk/$shortDate/${R2Config.region}/${R2Config.service}/aws4_request, SignedHeaders=$signedHeaders, Signature=$signature"
+
+            val request = Request.Builder()
+                .url("https://$cleanHost/$cleanBucket?$query")
+                .get()
+                .header("Host", cleanHost)
+                .header("x-amz-date", date)
+                .header("x-amz-content-sha256", payloadHash)
+                .header("Authorization", auth)
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    Pair(true, "Connected successfully")
+                } else {
+                    Pair(false, "HTTP ${resp.code}: ${resp.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, e.message ?: "Connection failed")
+        }
+    }
+
     private fun parseListResultFromXml(xml: String): ListVaultResult {
         val keys = mutableListOf<String>()
         var isTruncated = false
