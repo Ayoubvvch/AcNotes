@@ -1481,11 +1481,11 @@ fun NotesListScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text("AcNotes App", color = TextPrimary, fontSize = 13.sp)
-                                        Text("v3.2.0", color = TextMuted, fontSize = 12.sp)
+                                        Text("v3.2.1", color = TextMuted, fontSize = 12.sp)
                                     }
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Button(
-                                        onClick = { viewModel.checkForUpdates("3.2.0") },
+                                        onClick = { viewModel.checkForUpdates("3.2.1") },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = EmeraldPrimary,
                                             contentColor = BgDark

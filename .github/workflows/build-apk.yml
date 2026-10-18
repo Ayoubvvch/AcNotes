@@ -33,24 +33,26 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.2.0.apk
+          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.2.1.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-            name: AcNotes-v3.2.0-Signed-APK
-            path: release-output/AcNotes-v3.2.0.apk
+            name: AcNotes-v3.2.1-Signed-APK
+            path: release-output/AcNotes-v3.2.1.apk
             if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-            tag_name: v3.2.0
-            name: "AcNotes v3.2.0 - Smart Bucket Auto-Discovery & Gallery Profile Avatars"
+            tag_name: v3.2.1
+            name: "AcNotes v3.2.1 - Smart Bucket Auto-Discovery & Gallery Profile Avatars"
             body: |
-              ### 🚀 AcNotes v3.2.0 - Smart Bucket Auto-Discovery & Gallery Profile Avatars
+              ### 🚀 AcNotes v3.2.1 - Smart Bucket Auto-Discovery & Gallery Profile Avatars
 
+              - ⚡ **Fixed HTTP 403 Forbidden on Connect:**
+                - Canonical SigV4 request corrected for S3 bucket connection verification on Cloudflare R2.
               - 🔍 **Smart S3 Bucket Auto-Discovery (No Manual Bucket Typing):**
                 - Connect effortlessly using only your Account ID, Access Key ID, and Secret Key. AcNotes automatically detects and presents existing buckets (e.g., `my-vault`) as selectable chips with 1-tap selection, plus instant "+ Create New Bucket" support.
               - 📸 **Gallery Profile Picture Picker:**
@@ -61,6 +63,6 @@ jobs:
                 - Check for updates and download signed APKs directly within the app.
               - 🔐 **Cryptographically Signed APK (In-Place Updates):**
                 - Retains release key signature for seamless in-place installation over existing releases.
-            files: release-output/AcNotes-v3.2.0.apk
+            files: release-output/AcNotes-v3.2.1.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

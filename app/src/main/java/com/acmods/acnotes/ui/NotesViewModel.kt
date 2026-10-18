@@ -221,7 +221,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         periodicSyncJob?.cancel()
     }
 
-    fun checkForUpdates(currentVersion: String = "3.2.0") {
+    fun checkForUpdates(currentVersion: String = "3.2.1") {
         viewModelScope.launch {
             _updateState.value = UpdateUiState.Checking
             val result = AppUpdater.checkForUpdate(currentVersion)

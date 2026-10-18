@@ -413,11 +413,10 @@ class R2SyncEngine {
             val date = getAmzDate()
             val shortDate = getShortDate()
             val payloadHash = sha256Hex(ByteArray(0))
-            val query = "prefix=.Vault/&max-keys=10"
 
             val canonicalHeaders = "host:$cleanHost\nx-amz-content-sha256:$payloadHash\nx-amz-date:$date\n"
             val signedHeaders = "host;x-amz-content-sha256;x-amz-date"
-            val canonicalRequest = "GET\n/$cleanBucket\n$query\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
+            val canonicalRequest = "GET\n/$cleanBucket\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash"
 
             val signingKey = getSignatureKey(cleanSk, shortDate, R2Config.region, R2Config.service)
             val stringToSign = "AWS4-HMAC-SHA256\n$date\n$shortDate/${R2Config.region}/${R2Config.service}/aws4_request\n${sha256Hex(canonicalRequest.toByteArray(Charsets.UTF_8))}"
@@ -425,7 +424,7 @@ class R2SyncEngine {
             val auth = "AWS4-HMAC-SHA256 Credential=$cleanAk/$shortDate/${R2Config.region}/${R2Config.service}/aws4_request, SignedHeaders=$signedHeaders, Signature=$signature"
 
             val request = Request.Builder()
-                .url("https://$cleanHost/$cleanBucket?$query")
+                .url("https://$cleanHost/$cleanBucket")
                 .get()
                 .header("Host", cleanHost)
                 .header("x-amz-date", date)
