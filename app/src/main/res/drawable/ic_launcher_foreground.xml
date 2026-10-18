@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Rounded Note Card -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M35,28 L73,28 C76.3,28 79,30.7 79,34 L79,74 C79,77.3 76.3,80 73,80 L35,80 C31.7,80 29,77.3 29,74 L29,34 C29,30.7 31.7,28 35,28 Z" />
+    <!-- Note Page Inner Inset -->
+    <path
+        android:fillColor="#09090B"
+        android:pathData="M37,32 L71,32 C72.6,32 74,33.4 74,35 L74,73 C74,74.6 72.6,76 71,76 L37,76 C35.4,76 34,74.6 34,73 L34,35 C34,33.4 35.4,32 37,32 Z" />
+    <!-- Note Lines -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M41,42 L67,42 C67.5,42 68,42.5 68,43 C68,43.5 67.5,44 67,44 L41,44 C40.5,44 40,43.5 40,43 C40,42.5 40.5,42 41,42 Z" />
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M41,50 L67,50 C67.5,50 68,50.5 68,51 C68,51.5 67.5,52 67,52 L41,52 C40.5,52 40,51.5 40,51 C40,50.5 40.5,50 41,50 Z" />
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M41,58 L57,58 C57.5,58 58,58.5 58,59 C58,59.5 57.5,60 57,60 L41,60 C40.5,60 40,59.5 40,59 C40,58.5 40.5,58 41,58 Z" />
+    <!-- Pencil / Pen Accent -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M65,65 L69,61 L73,65 L69,69 Z" />
+</vector>

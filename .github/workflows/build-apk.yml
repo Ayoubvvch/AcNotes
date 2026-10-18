@@ -1,0 +1,67 @@
+name: Build AcNotes Pure Native APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Pure Native Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x gradlew
+
+      - name: Build Signed Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Prepare APK for Release
+        run: |
+          mkdir -p release-output
+          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.0.0.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AcNotes-v3.0.0-Signed-APK
+          path: release-output/AcNotes-v3.0.0.apk
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main')
+        with:
+          tag_name: v3.0.0
+          name: "AcNotes v3.0.0 - Public Open-Source Release & Vault Encryption"
+          body: |
+            ### 🔐 AcNotes v3.0.0 - Public Open-Source Release & Vault Encryption
+
+            - 🛡️ **Zero Plain-Text Credentials & AES-256-GCM Vault Protection:**
+              - Complete cryptographic protection. Cloudflare R2 credentials are encrypted and can only be unlocked with the Owner Master Password.
+              - Multi-tenant support: Public users can connect their own Cloudflare R2 or S3 bucket seamlessly.
+            - 🔄 **In-App Updater with Live Download Progress:**
+              - Check for updates directly inside the app with real-time download progress and instant package installation prompt.
+            - 🗂️ **Isolated Folder & Home Architecture:**
+              - Notes inside folders remain strictly inside folders; clean, uncluttered Home view.
+            - ⏱️ **Newest-First Chronological Ordering:**
+              - Most recently added notes always appear at the top.
+            - 🔐 **Cryptographically Signed APK (In-Place Updates):**
+              - Install directly over previous releases without uninstalling.
+          files: release-output/AcNotes-v3.0.0.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
