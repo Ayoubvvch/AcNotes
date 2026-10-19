@@ -116,19 +116,35 @@ fun NoteViewScreen(
                     }
 
                     // Edit
-                    Button(
-                        onClick = { viewModel.editCurrentNote() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = EmeraldPrimary,
-                            contentColor = BgDark
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                        modifier = Modifier.padding(end = 12.dp)
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Edit", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    if (note.isWhiteboard) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = CardDark,
+                            border = BorderStroke(1.dp, BorderDark),
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text("🎨 PC Only", fontSize = 12.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { viewModel.editCurrentNote() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = EmeraldPrimary,
+                                contentColor = BgDark
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Edit", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDark)
@@ -164,7 +180,7 @@ fun NoteViewScreen(
                     }
             ) {
                 Text(
-                    text = if (note.title.isNotBlank()) note.title else "Untitled Note",
+                    text = if (note.isWhiteboard) "🎨 ${note.title.ifBlank { "Untitled Whiteboard" }}" else if (note.title.isNotBlank()) note.title else "Untitled Note",
                     color = TextPrimary,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,

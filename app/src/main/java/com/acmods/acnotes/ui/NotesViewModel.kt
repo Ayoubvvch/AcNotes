@@ -102,7 +102,6 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         loadData()
         if (R2Config.isCloudConnected) {
             syncNow()
-            startPeriodicSync()
         }
     }
 
@@ -189,7 +188,6 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 syncNow()
-                startPeriodicSync()
                 onResult(true, "Connected successfully")
             } else {
                 onResult(false, msg)
@@ -233,7 +231,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         periodicSyncJob?.cancel()
     }
 
-    fun checkForUpdates(currentVersion: String = "3.4.0") {
+    fun checkForUpdates(currentVersion: String = "3.5.0") {
         viewModelScope.launch {
             _updateState.value = UpdateUiState.Checking
             val result = AppUpdater.checkForUpdate(currentVersion)
@@ -266,18 +264,9 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startPeriodicSync() {
-        if (!R2Config.isConfigured) return
+        // Disabled: periodic background sync removed per architectural overhaul to preserve battery/bandwidth.
+        // Sync is handled on demand (syncNow, saveNote, deleteNote) or on app launch.
         periodicSyncJob?.cancel()
-        periodicSyncJob = viewModelScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                delay(45_000)
-                val success = r2Sync.sync(dbHelper)
-                if (success) {
-                    loadData()
-                    _syncState.value = SyncState.SAVED
-                }
-            }
-        }
     }
 
     fun loadData() {
@@ -356,6 +345,8 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     fun editCurrentNote() {
         val current = _screen.value
         if (current is Screen.View) {
+            val note = _notes.value.find { it.id == current.noteId }
+            if (note?.isWhiteboard == true) return
             navigateTo(Screen.Edit(current.noteId))
         }
     }
@@ -401,9 +392,12 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
+            val allNotes = dbHelper.getAllNotes()
+            val uniqueTitle = getUniqueTitle(derivedTitle, folder.trim(), allNotes, id)
+
             val preliminaryNote = Note(
                 id = finalId,
-                title = derivedTitle,
+                title = uniqueTitle,
                 text = text.trim(),
                 preview = com.acmods.acnotes.data.extractPreview(text.trim()),
                 folder = folder.trim(),
@@ -413,7 +407,6 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 syncKey = oldKey
             )
 
-            val allNotes = dbHelper.getAllNotes()
             val targetKey = r2Sync.getNoteKey(preliminaryNote, allNotes)
             val note = preliminaryNote.copy(syncKey = targetKey)
 

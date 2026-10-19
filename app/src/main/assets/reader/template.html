@@ -120,17 +120,149 @@ img { max-width: 100%; border-radius: 12px; margin: 1em 0; }
     font-size: 1.1em;
     color: #34d399;
 }
+
+/* Whiteboard Card Styling */
+.whiteboard-card {
+    background: #18181b;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+    padding: 24px 18px;
+    margin: 16px 0;
+    text-align: center;
+}
+.whiteboard-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 6px 14px;
+    border-radius: 9999px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-bottom: 14px;
+}
+.whiteboard-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #f4f4f5;
+    margin-bottom: 8px;
+}
+.whiteboard-desc {
+    color: #a1a1aa;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 20px;
+}
+.whiteboard-stats {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+.stat-pill {
+    background: #27272a;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    color: #d4d4d8;
+}
+.whiteboard-text-section {
+    text-align: start;
+    margin-top: 20px;
+    border-top: 1px solid #27272a;
+    padding-top: 16px;
+}
+.whiteboard-text-header {
+    font-size: 0.98rem;
+    font-weight: 600;
+    color: #34d399;
+    margin-bottom: 12px;
+}
+.whiteboard-text-item {
+    background: #121215;
+    border-inline-start: 3px solid #34d399;
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 10px;
+    color: #e4e4e7;
+    font-size: 0.92rem;
+    white-space: pre-wrap;
+    line-height: 1.6;
+}
 </style>
 </head>
 <body>
 <div id="content"></div>
 
 <script>
+function renderWhiteboardCard(raw) {
+    var container = document.getElementById('content');
+    try {
+        var data = JSON.parse(raw);
+        var elements = Array.isArray(data.elements) ? data.elements : [];
+        var activeElements = elements.filter(function(e) { return !e.isDeleted; });
+        var textElements = activeElements.filter(function(e) { return e.type === 'text' && e.text && e.text.trim(); });
+
+        var count = activeElements.length;
+        var shapesCount = activeElements.filter(function(e) { return e.type !== 'text'; }).length;
+        var textsCount = textElements.length;
+
+        var html = '<div class="whiteboard-card">';
+        html += '<div class="whiteboard-badge">🎨 Excalidraw Whiteboard</div>';
+        html += '<h2 class="whiteboard-title">سبورة تفاعلية (للقراءة والعرض)</h2>';
+        html += '<p class="whiteboard-desc">تم إنشاء هذه السبورة عبر الحاسوب. للرسم أو التعديل الكامل، استخدم تطبيق الويب على الحاسوب.</p>';
+
+        html += '<div class="whiteboard-stats">';
+        html += '<div class="stat-pill">📊 إجمالي العناصر: <strong>' + count + '</strong></div>';
+        if (shapesCount > 0) html += '<div class="stat-pill">📐 أشكال ورسومات: <strong>' + shapesCount + '</strong></div>';
+        if (textsCount > 0) html += '<div class="stat-pill">✍️ نصوص وملاحظات: <strong>' + textsCount + '</strong></div>';
+        html += '</div>';
+
+        if (textElements.length > 0) {
+            html += '<div class="whiteboard-text-section">';
+            html += '<div class="whiteboard-text-header">📝 النصوص والملاحظات داخل السبورة:</div>';
+            for (var i = 0; i < textElements.length; i++) {
+                var escaped = textElements[i].text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                html += '<div class="whiteboard-text-item">' + escaped + '</div>';
+            }
+            html += '</div>';
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+
+        if (window.renderMathInElement) {
+            renderMathInElement(container, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '\\[', right: '\\]', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\(', right: '\\)', display: false}
+                ],
+                throwOnError: false
+            });
+        }
+    } catch(e) {
+        container.innerHTML = '<div class="whiteboard-card"><p style="color:#ef4444">⚠️ تعذر قراءة بيانات السبورة: ' + (e.message || 'خطأ') + '</p></div>';
+    }
+}
+
 function renderMarkdownWithMath(raw) {
     var savedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
 
     if (!raw) {
         document.getElementById('content').innerHTML = '<p style="color:#71717a;font-style:italic">Empty note.</p>';
+        return;
+    }
+
+    if (raw.includes('"type":"excalidraw"') || raw.includes('"type": "excalidraw"')) {
+        renderWhiteboardCard(raw);
         return;
     }
 

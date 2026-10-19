@@ -33,33 +33,36 @@ jobs:
       - name: Prepare APK for Release
         run: |
           mkdir -p release-output
-          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.4.0.apk
+          cp app/build/outputs/apk/release/app-release.apk release-output/AcNotes-v3.5.0.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-            name: AcNotes-v3.4.0-Signed-APK
-            path: release-output/AcNotes-v3.4.0.apk
+            name: AcNotes-v3.5.0-Signed-APK
+            path: release-output/AcNotes-v3.5.0.apk
             if-no-files-found: error
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-            tag_name: v3.4.0
-            name: "AcNotes v3.4.0 - Instant Direct Share to Home & Pure .Vault Storage"
+            tag_name: v3.5.0
+            name: "AcNotes v3.5.0 - Incremental Delta R2 Sync & Offline Excalidraw Viewer"
             body: |
-              ### 🚀 AcNotes v3.4.0 - Instant Direct Share to Home & Pure .Vault Storage
+              ### 🚀 AcNotes v3.5.0 - Incremental Delta R2 Sync & Offline Excalidraw Viewer
 
-              - 📥 **Instant Direct Share to Home:**
-                - Share any `.md`, `.txt`, text, or document directly from other apps (Google Drive, Files, Chrome, WhatsApp) into AcNotes.
-                - Automatically saved straight to **Home** (`folder = ""`) without dialog interruptions, followed by immediate background sync to Cloudflare R2.
-              - 📑 **Multi-Item Batch Share:**
-                - Select and share multiple files at once; all items are processed into Home and synchronized together.
-              - ☁️ **Pure `.Vault` Architecture (100% Web App Alignment):**
-                - Completely purged all `.AcNotes` paths. The app now operates exclusively on `.Vault/`, working as a true twin brother to the desktop web app (`index.html`).
+              - ⚡ **Incremental Delta S3 / R2 Sync:**
+                - Completely purged the recurring 45s background sync loop, saving battery and data.
+                - Sync now runs on-demand (when saving, deleting, or tapping sync) and upon app launch.
+                - Implemented delta downloading via S3 `LastModified` timestamps: only new or modified `.md` files are downloaded, cutting network traffic by ~99%.
+              - 🎨 **Offline Excalidraw Whiteboard Viewer:**
+                - Zero-dependency, 100% offline-compatible native reader card for Excalidraw notes created on PC.
+                - Automatically extracts element statistics, shapes count, and all written text notes directly on the phone.
+                - Whiteboard notes are safely protected as read-only on mobile (editing is reserved for PC mouse/stylus).
+              - 🏷️ **Intelligent Title Uniqueness:**
+                - Added automatic numbered deduplication (`Note (1)`, `Note (2)`) matching the desktop web app architecture to ensure filesystem safety.
               - 🔐 **Cryptographically Signed APK (In-Place Updates):**
                 - Retains release keystore signature for direct seamless in-place updating over previous builds.
-            files: release-output/AcNotes-v3.4.0.apk
+            files: release-output/AcNotes-v3.5.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

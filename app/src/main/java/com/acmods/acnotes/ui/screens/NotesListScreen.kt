@@ -1862,7 +1862,7 @@ fun NoteCardItem(
                 verticalAlignment = Alignment.Top
             ) {
                 Text(
-                    text = if (note.title.isNotBlank()) note.title else "Untitled Note",
+                    text = if (note.isWhiteboard) "🎨 ${note.title.ifBlank { "Untitled Whiteboard" }}" else if (note.title.isNotBlank()) note.title else "Untitled Note",
                     color = TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,

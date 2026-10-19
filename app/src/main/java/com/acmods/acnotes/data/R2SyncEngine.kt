@@ -45,28 +45,47 @@ class R2SyncEngine {
             val localNotes = dbHelper.getAllNotes()
             val deletedIds = dbHelper.getDeletedIds()
 
-            // Step 1: List all remote keys in .Vault/
-            val remoteKeys = listVaultKeys() ?: return@withContext false
-            val mdKeys = remoteKeys.filter { it.endsWith(".md") }
+            // Step 1: List all remote objects in .Vault/
+            val remoteObjects = listVaultObjects() ?: return@withContext false
+            val mdObjects = remoteObjects.filter { it.key.endsWith(".md") }
 
-            Log.i(TAG, "Found ${mdKeys.size} markdown files on Cloudflare R2")
+            Log.i(TAG, "Found ${mdObjects.size} markdown files on Cloudflare R2")
 
-            // Step 2: Download remote files concurrently (up to 8 in parallel)
+            // Index local notes by key
+            val localByKey = mutableMapOf<String, Note>()
+            for (note in localNotes) {
+                val key = note.syncKey ?: getNoteKey(note)
+                localByKey[key] = note
+            }
+
+            // Step 2: Download ONLY files that are missing locally or newer on remote
+            val toDownload = mdObjects.filter { remote ->
+                val local = localByKey[remote.key]
+                if (local == null) {
+                    true // New note from another device
+                } else {
+                    // Only download if remote is strictly newer than local edit
+                    remote.lastModifiedMs > (local.updatedAt + 2000L)
+                }
+            }
+
+            Log.i(TAG, "Incremental sync: ${toDownload.size} files need downloading out of ${mdObjects.size}")
+
             val semaphore = Semaphore(8)
-            val downloadedNotes = coroutineScope {
-                mdKeys.map { key ->
+            val newlyDownloadedNotes = coroutineScope {
+                toDownload.map { obj ->
                     async {
                         semaphore.withPermit {
                             try {
-                                val content = getObject(key)
+                                val content = getObject(obj.key)
                                 if (content != null) {
-                                    val parsed = parseMdFile(key, content)
+                                    val parsed = parseMdFile(obj.key, content)
                                     if (parsed != null && !deletedIds.contains(parsed.id)) {
                                         return@withPermit parsed
                                     }
                                 }
                             } catch (e: Exception) {
-                                Log.w(TAG, "Failed downloading note $key: ${e.message}")
+                                Log.w(TAG, "Failed downloading note ${obj.key}: ${e.message}")
                             }
                             null
                         }
@@ -74,10 +93,20 @@ class R2SyncEngine {
                 }.awaitAll().filterNotNull()
             }
 
-            Log.i(TAG, "Successfully downloaded ${downloadedNotes.size} notes from R2")
+            // Build complete remote map: fresh downloads + unchanged existing local notes
+            val remoteKeySet = mdObjects.map { it.key }.toSet()
+            val remoteMap = mutableMapOf<Long, Note>()
+            for (dn in newlyDownloadedNotes) {
+                remoteMap[dn.id] = dn
+            }
+            for (obj in mdObjects) {
+                val local = localByKey[obj.key]
+                if (local != null && !remoteMap.containsKey(local.id)) {
+                    remoteMap[local.id] = local
+                }
+            }
 
             // Step 3: Two-way merge with deletion synchronization
-            val remoteMap = downloadedNotes.associateBy { it.id }
             val mergedMap = mutableMapOf<Long, Note>()
             val notesToDeleteLocally = mutableListOf<Long>()
 
@@ -96,7 +125,8 @@ class R2SyncEngine {
                         mergedMap[local.id] = local
                     }
                 } else {
-                    if (local.syncKey != null) {
+                    val key = local.syncKey ?: getNoteKey(local)
+                    if (local.syncKey != null && !remoteKeySet.contains(key)) {
                         // Previously synced to R2, but no longer on R2 -> deleted remotely!
                         notesToDeleteLocally.add(local.id)
                     } else {
@@ -106,7 +136,7 @@ class R2SyncEngine {
                 }
             }
 
-            for (remote in downloadedNotes) {
+            for (remote in remoteMap.values) {
                 if (!mergedMap.containsKey(remote.id) && !deletedIds.contains(remote.id)) {
                     mergedMap[remote.id] = remote
                 }
@@ -247,7 +277,9 @@ class R2SyncEngine {
         deleteKeyRemote(key)
     }
 
-    private data class ListVaultResult(val keys: List<String>, val isTruncated: Boolean, val nextMarker: String?)
+    data class RemoteObjectMeta(val key: String, val lastModifiedMs: Long, val etag: String)
+
+    private data class ListVaultResult(val items: List<RemoteObjectMeta>, val isTruncated: Boolean, val nextMarker: String?)
 
     private fun fetchVaultPage(query: String): ListVaultResult? {
         return try {
@@ -281,8 +313,8 @@ class R2SyncEngine {
         }
     }
 
-    private fun listKeysWithPrefix(prefixEncoded: String): List<String> {
-        val allKeys = mutableListOf<String>()
+    private fun listObjectsWithPrefix(prefixEncoded: String): List<RemoteObjectMeta> {
+        val allItems = mutableListOf<RemoteObjectMeta>()
         var marker: String? = null
         var iterations = 0
         val maxIterations = 50 // Safeguard up to 50,000 files
@@ -294,22 +326,22 @@ class R2SyncEngine {
                 "marker=" + URLEncoder.encode(marker, "UTF-8").replace("+", "%20") + "&prefix=$prefixEncoded"
             }
             val result = fetchVaultPage(query) ?: break
-            allKeys.addAll(result.keys)
+            allItems.addAll(result.items)
 
-            marker = if (result.isTruncated && result.keys.isNotEmpty()) {
-                result.nextMarker ?: result.keys.lastOrNull()
+            marker = if (result.isTruncated && result.items.isNotEmpty()) {
+                result.nextMarker ?: result.items.lastOrNull()?.key
             } else {
                 null
             }
             iterations++
         } while (marker != null && iterations < maxIterations)
 
-        return allKeys
+        return allItems
     }
 
-    private fun listVaultKeys(): List<String>? {
+    private fun listVaultObjects(): List<RemoteObjectMeta>? {
         if (!R2Config.isConfigured) return null
-        return listKeysWithPrefix(".Vault%2F")
+        return listObjectsWithPrefix(".Vault%2F")
     }
 
     private fun getObject(key: String): String? {
@@ -636,7 +668,7 @@ class R2SyncEngine {
     }
 
     private fun parseListResultFromXml(xml: String): ListVaultResult {
-        val keys = mutableListOf<String>()
+        val items = mutableListOf<RemoteObjectMeta>()
         var isTruncated = false
         var nextMarker: String? = null
         try {
@@ -654,14 +686,37 @@ class R2SyncEngine {
                 nextMarker = markerNodes.item(0).textContent.trim()
             }
 
-            val keyNodes = doc.getElementsByTagName("Key")
-            for (i in 0 until keyNodes.length) {
-                keys.add(keyNodes.item(i).textContent)
+            val contentsNodes = doc.getElementsByTagName("Contents")
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+
+            for (i in 0 until contentsNodes.length) {
+                val node = contentsNodes.item(i)
+                if (node is org.w3c.dom.Element) {
+                    val key = node.getElementsByTagName("Key").item(0)?.textContent?.trim() ?: ""
+                    val lastModStr = node.getElementsByTagName("LastModified").item(0)?.textContent?.trim() ?: ""
+                    val etag = node.getElementsByTagName("ETag").item(0)?.textContent?.trim()?.removeSurrounding("\"") ?: ""
+
+                    var lastModifiedMs = 0L
+                    if (lastModStr.isNotBlank()) {
+                        try {
+                            val cleanStr = lastModStr.substringBefore(".")
+                            lastModifiedMs = sdf.parse(cleanStr)?.time ?: 0L
+                        } catch (e: Exception) {
+                            lastModifiedMs = 0L
+                        }
+                    }
+
+                    if (key.isNotBlank()) {
+                        items.add(RemoteObjectMeta(key, lastModifiedMs, etag))
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "XML parse error: ${e.message}")
         }
-        return ListVaultResult(keys, isTruncated, nextMarker)
+        return ListVaultResult(items, isTruncated, nextMarker)
     }
 
     fun getNoteKey(note: Note, allNotes: List<Note> = emptyList()): String {
