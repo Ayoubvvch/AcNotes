@@ -119,8 +119,8 @@ fun NoteViewScreen(
                     if (note.isWhiteboard) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = CardDark,
-                            border = BorderStroke(1.dp, BorderDark),
+                            color = SurfaceCard,
+                            border = BorderStroke(1.dp, SurfaceBorder),
                             modifier = Modifier.padding(end = 12.dp)
                         ) {
                             Row(
